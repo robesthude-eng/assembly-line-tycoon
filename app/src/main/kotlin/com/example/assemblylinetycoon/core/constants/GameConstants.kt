@@ -28,9 +28,18 @@ object GameConstants {
     /** Нижняя граница длительности крафта после апгрейдов (мс). */
     const val MIN_CRAFT_DURATION_MS: Long = 100L
 
-    /** Множители формул апгрейда (реализация — в MathUtils, этап 2). */
+    /** Множители формул апгрейда, см. MathUtils. */
     const val COST_GROWTH_FACTOR: Double = 1.15
     const val CRAFT_SPEED_FACTOR: Double = 0.95
+
+    /** Доля офлайн-дохода от активной игры: отсутствие выгодно, но не выгоднее игры. */
+    const val OFFLINE_EFFICIENCY: Double = 0.5
+
+    /** Множитель дохода при активном «Ускорении» за просмотр ролика. */
+    const val OVERDRIVE_MULTIPLIER: Double = 2.0
+
+    /** Длительность «Ускорения» (мс) — 5 минут. */
+    const val OVERDRIVE_DURATION_MS: Long = 5 * 60 * 1000L
 
     /** Версия схемы сохранения. Инкрементируется при несовместимых изменениях. */
     const val SAVE_SCHEMA_VERSION: Int = 1
