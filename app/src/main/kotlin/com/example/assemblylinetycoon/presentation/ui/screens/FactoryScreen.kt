@@ -155,6 +155,9 @@ private fun FactoryDialogs(
         is FactoryDialog.MachineInfo -> MachineDialog(
             machine = dialog.machine,
             onUpgrade = { id -> onIntent(FactoryIntent.UpgradeMachine(id)) },
+            onRotate = { direction ->
+                onIntent(FactoryIntent.Rotate(dialog.machine.position, direction))
+            },
             onDemolish = { onIntent(FactoryIntent.Demolish(dialog.machine.position)) },
             onDismiss = { onIntent(FactoryIntent.CloseDialog) },
         )
@@ -181,8 +184,9 @@ private fun FactoryDialogs(
         is FactoryDialog.BeltCell -> BeltDialog(
             position = dialog.position,
             direction = dialog.direction,
+            refund = dialog.refund,
             onRotate = { direction ->
-                onIntent(FactoryIntent.RotateBelt(dialog.position, direction))
+                onIntent(FactoryIntent.Rotate(dialog.position, direction))
             },
             onDemolish = { onIntent(FactoryIntent.Demolish(dialog.position)) },
             onDismiss = { onIntent(FactoryIntent.CloseDialog) },

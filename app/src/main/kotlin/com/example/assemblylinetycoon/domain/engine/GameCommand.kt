@@ -39,12 +39,18 @@ sealed interface GameCommand {
     ) : GameCommand
 
     /** Повернуть уже проложенную ленту; бесплатно. */
-    data class RotateBelt(
+    data class Rotate(
         val position: GridPosition,
         val direction: Direction,
     ) : GameCommand
 
     /** Снести содержимое ячейки без возврата денег. */
+    /**
+     * Субсидия игроку, у которого завод встал, а денег ни на что не хватает.
+     * Выдаётся один раз при запуске, см. [EconomyRescue].
+     */
+    data class ApplyRescueGrant(val coins: Long) : GameCommand
+
     data class Demolish(val position: GridPosition) : GameCommand
 
     /** Награда за просмотренный ролик. */

@@ -104,7 +104,10 @@ object FactoryUiStateMapper {
             is FactoryDialog.BeltCell -> {
                 val cell = domain.grid[dialog.position]
                 if (cell?.isBelt == true) {
-                    dialog.copy(direction = cell.direction)
+                    dialog.copy(
+                        direction = cell.direction,
+                        refund = FactoryBuilder.refundFor(domain, dialog.position),
+                    )
                 } else {
                     FactoryDialog.None  // ленту снесли, пока диалог был открыт
                 }
@@ -155,6 +158,8 @@ object FactoryUiStateMapper {
             outputItemName = machine.recipeOutputId?.let { ItemCatalog.find(it)?.displayName },
             craftDurationMillis = duration,
             upgradeCost = upgradeCost,
+            facing = machine.facing,
+            refund = FactoryBuilder.refundFor(domain, machine.position),
             // Тот же предикат, что проверит движок при списании денег.
             canAffordUpgrade = FactoryBuilder.canUpgrade(domain, machine.id),
         )

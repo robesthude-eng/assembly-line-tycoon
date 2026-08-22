@@ -287,24 +287,80 @@ class FactoryBuilderTest {
         assertEquals(0L, BeltCatalog.ROTATE_COST)
     }
 
-    @Test // поворот машины не выполняется: направление задаёт выход результата
-    fun rotatingMachineIsIgnored() {
+    @Test // станок разворачивается теми же кнопками, что и лента
+    fun rotatingMachineChangesOutputSide() {
         val withMachine = FactoryBuilder.place(richState, cell, MachineType.SMELTER)
 
-        assertSame(withMachine, FactoryBuilder.rotateBelt(withMachine, cell, Direction.UP))
+        val rotated = FactoryBuilder.rotate(withMachine, cell, Direction.UP)
+
+        assertEquals(Direction.UP, rotated.machineAt(cell)!!.facing)
+        assertEquals(cell.neighbor(Direction.UP), rotated.machineAt(cell)!!.outputPosition)
+        assertEquals("Разворот станка бесплатен", withMachine.coins, rotated.coins)
+        assertTrue(FactoryBuilder.canRotate(rotated, cell))
+    }
+
+    @Test // разворачивать нечего в пустой ячейке
+    fun rotatingEmptyCellIsIgnored() {
+        assertTrue(!FactoryBuilder.canRotate(richState, cell))
+        assertSame(richState, FactoryBuilder.rotate(richState, cell, Direction.UP))
+    }
+
+    @Test // станок у края поля выдаёт продукцию внутрь, а не за границу
+    fun machineAtTheEdgeFacesInsideTheField() {
+        val edge = GridPosition(richState.grid.width - 1, 4)
+
+        val built = FactoryBuilder.place(richState, edge, MachineType.SPAWNER)
+
+        val output = built.machineAt(edge)!!.outputPosition
+        assertTrue("Выход $output вне поля", built.grid.contains(output))
+    }
+
+    @Test // если рядом уже есть лента, станок сразу смотрит на неё
+    fun newMachineFacesNeighbouringBelt() {
+        val beltCell = cell.neighbor(Direction.DOWN)
+        val withBelt = FactoryBuilder.placeBelt(richState, beltCell, Direction.RIGHT)
+
+        val built = FactoryBuilder.place(withBelt, cell, MachineType.SMELTER)
+
+        assertEquals(Direction.DOWN, built.machineAt(cell)!!.facing)
     }
 
     // ── Снос ────────────────────────────────────────────────────────────────
 
-    @Test // снос ленты освобождает ячейку и не возвращает денег
-    fun demolishingBeltFreesCellWithoutRefund() {
+    @Test // снос ленты освобождает ячейку и возвращает половину цены
+    fun demolishingBeltFreesCellAndRefundsHalf() {
         val withBelt = FactoryBuilder.placeBelt(richState, cell, Direction.RIGHT)
+        val refund = FactoryBuilder.refundFor(withBelt, cell)
 
         val cleared = FactoryBuilder.demolish(withBelt, cell)
 
         assertTrue(cleared.grid[cell]!!.isEmpty)
-        assertEquals("Возврата денег за снос нет", withBelt.coins, cleared.coins)
+        assertEquals(withBelt.coins + refund, cleared.coins)
+        assertEquals((BeltCatalog.buildCost(ownedCount = 0) * FactoryBuilder.REFUND_RATE).toLong(), refund)
         assertTrue(FactoryBuilder.isBuildable(cleared, cell))
+    }
+
+    @Test // за снос станка возвращается половина его текущей цены
+    fun demolishingMachineRefundsHalfOfItsCost() {
+        val built = FactoryBuilder.place(richState, cell, MachineType.SMELTER)
+        val expected =
+            (MachineCatalog.buildCost(MachineType.SMELTER, ownedCount = 0) * FactoryBuilder.REFUND_RATE).toLong()
+
+        val cleared = FactoryBuilder.demolish(built, cell)
+
+        assertEquals(expected, FactoryBuilder.refundFor(built, cell))
+        assertEquals(built.coins + expected, cleared.coins)
+        // Половина, а не всё: перестановка станка должна что-то стоить.
+        assertTrue(cleared.coins < richState.coins)
+    }
+
+    @Test // улучшения при сносе не возвращаются
+    fun demolishingDoesNotRefundUpgrades() {
+        val built = FactoryBuilder.place(richState, cell, MachineType.SMELTER)
+        val id = built.machineAt(cell)!!.id
+        val upgraded = FactoryBuilder.upgrade(built, id)
+
+        assertEquals(FactoryBuilder.refundFor(built, cell), FactoryBuilder.refundFor(upgraded, cell))
     }
 
     @Test // снос машины убирает её и из списка, и с поля

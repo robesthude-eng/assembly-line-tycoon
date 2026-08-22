@@ -100,10 +100,14 @@ class GameLoop(
             direction = command.direction,
         )
 
-        is GameCommand.RotateBelt -> FactoryBuilder.rotateBelt(
+        is GameCommand.Rotate -> FactoryBuilder.rotate(
             state = current,
             position = command.position,
             direction = command.direction,
+        )
+
+        is GameCommand.ApplyRescueGrant -> current.copy(
+            coins = MathUtility.addCoins(current.coins, command.coins),
         )
 
         is GameCommand.Demolish -> FactoryBuilder.demolish(current, command.position)

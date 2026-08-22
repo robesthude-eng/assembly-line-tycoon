@@ -3,6 +3,7 @@ package com.example.assemblylinetycoon.presentation.viewmodel
 import androidx.lifecycle.viewModelScope
 import com.example.assemblylinetycoon.core.constants.GameConstants
 import com.example.assemblylinetycoon.core.utils.TimeProvider
+import com.example.assemblylinetycoon.domain.engine.EconomyRescue
 import com.example.assemblylinetycoon.domain.engine.FactoryBuilder
 import com.example.assemblylinetycoon.domain.engine.GameCommand
 import com.example.assemblylinetycoon.domain.engine.GameEngine
@@ -93,10 +94,10 @@ class FactoryViewModel(
 
             is FactoryIntent.PlaceBelt -> placeBelt(intent)
 
-            is FactoryIntent.RotateBelt -> gameEngine.dispatch(
+            is FactoryIntent.Rotate -> gameEngine.dispatch(
                 // Поворот бесплатен, проверять нечего: движок сам откажет,
-                // если ленту успели снести.
-                GameCommand.RotateBelt(intent.position, intent.direction),
+                // если содержимое клетки успели снести.
+                GameCommand.Rotate(intent.position, intent.direction),
             )
 
             is FactoryIntent.Demolish -> demolish(intent.position)
@@ -125,6 +126,15 @@ class FactoryViewModel(
         )
 
         gameEngine.start(saved)
+
+        // Игрок мог оказаться в мёртвой точке: завод стоит, денег ни на что
+        // не хватает. Это состояние выглядит как поломка игры, поэтому
+        // баланс дотягивается до стартового.
+        val rescue = EconomyRescue.grantFor(saved)
+        if (rescue > 0L) {
+            gameEngine.dispatch(GameCommand.ApplyRescueGrant(rescue))
+            sendEffect(FactoryEffect.ShowMessage("Завод простаивал: выдана субсидия"))
+        }
         if (progress.isSignificant) {
             // Начисление идёт командой, как любое изменение состояния:
             // ViewModel не имеет права трогать баланс напрямую.
@@ -171,6 +181,7 @@ class FactoryViewModel(
                     cell?.isBelt == true -> FactoryDialog.BeltCell(
                         position = intent.position,
                         direction = cell.direction,
+                        refund = FactoryBuilder.refundFor(domain, intent.position),
                     )
 
                     else -> FactoryUiStateMapper.emptyCellDialog(domain, intent.position)

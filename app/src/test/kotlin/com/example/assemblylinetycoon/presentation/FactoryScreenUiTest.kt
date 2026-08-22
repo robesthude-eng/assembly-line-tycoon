@@ -82,6 +82,8 @@ class FactoryScreenUiTest {
         outputItemName = "Слиток железа",
         craftDurationMillis = 3_600L,
         upgradeCost = 1_200L,
+        facing = Direction.RIGHT,
+        refund = 75L,
         canAffordUpgrade = true,
     )
 
@@ -227,9 +229,25 @@ class FactoryScreenUiTest {
 
         assertEquals(
             listOf(
-                FactoryIntent.RotateBelt(position, Direction.UP),
+                FactoryIntent.Rotate(position, Direction.UP),
                 FactoryIntent.Demolish(position),
             ),
+            intents,
+        )
+    }
+
+    @Test // карточка машины разворачивает станок теми же кнопками, что и ленту
+    fun machineDialogRotates() {
+        val intents = mutableListOf<FactoryIntent>()
+        show(uiState(dialog = FactoryDialog.MachineInfo(machineInfo)), onIntent = intents::add)
+
+        // Текущее направление выбирать бессмысленно — кнопка погашена.
+        compose.onNodeWithTag(directionButtonTag(Direction.RIGHT)).assertIsNotEnabled()
+        compose.onNodeWithTag(directionButtonTag(Direction.DOWN)).performClick()
+        compose.waitForIdle()
+
+        assertEquals(
+            listOf(FactoryIntent.Rotate(machineInfo.position, Direction.DOWN)),
             intents,
         )
     }

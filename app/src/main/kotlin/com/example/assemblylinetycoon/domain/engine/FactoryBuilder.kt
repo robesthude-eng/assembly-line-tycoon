@@ -28,8 +28,19 @@ import com.example.assemblylinetycoon.domain.model.MachineType
  */
 object FactoryBuilder {
 
-    /** Направление, в которое смотрит только что построенная машина. */
+    /** Запасное направление, если поле подсказать ничего не смогло. */
     val DEFAULT_FACING: Direction = Direction.RIGHT
+
+    /**
+     * Доля стоимости, возвращаемая при сносе.
+     *
+     * Половина — не для экономики, а против тупика: игрок, поставивший станок
+     * не туда, обязан иметь возможность исправиться. Полный возврат сделал бы
+     * перестановку бесплатной и обесценил выбор места, ноль (как было раньше)
+     * запирал игру намертво: денег на новый станок нет, а старый не работает.
+     * Заработать на этом нельзя — продаётся всегда дешевле, чем покупалось.
+     */
+    const val REFUND_RATE: Double = 0.5
 
     /**
      * Цена постройки машины типа [type] прямо сейчас.
@@ -62,6 +73,39 @@ object FactoryBuilder {
     }
 
     /**
+     * Куда будет смотреть машина, построенная в этой клетке.
+     *
+     * Направление выдачи выбирается по полю, а не берётся всегда «вправо».
+     * Причина простая: станок, поставленный у правого края, выкидывал бы
+     * продукцию за границу поля и молча не работал — с точки зрения игрока
+     * это выглядит как сломанная игра, а не как его ошибка.
+     *
+     * Порядок предпочтений: уже проложенная лента рядом → свободная клетка
+     * в сторону центра поля → любая клетка внутри поля.
+     */
+    fun defaultFacing(state: GameState, position: GridPosition): Direction {
+        val inside = Direction.entries.filter { state.grid.contains(position.neighbor(it)) }
+        if (inside.isEmpty()) return DEFAULT_FACING
+
+        // Лента рядом — почти наверняка то, ради чего станок и ставят.
+        inside.firstOrNull { state.grid[position.neighbor(it)]?.isBelt == true }?.let { return it }
+
+        val centerX = (state.grid.width - 1) / 2f
+        val centerY = (state.grid.height - 1) / 2f
+        val free = inside.filter { state.grid[position.neighbor(it)]?.isEmpty == true }
+        val candidates = free.ifEmpty { inside }
+
+        // Из оставшихся — та, что ведёт ближе к центру поля: там больше места
+        // для линии, чем у края.
+        return candidates.minByOrNull { direction ->
+            val next = position.neighbor(direction)
+            val dx = next.x - centerX
+            val dy = next.y - centerY
+            dx * dx + dy * dy
+        } ?: DEFAULT_FACING
+    }
+
+    /**
      * Постройка машины.
      *
      * Идентификатор берётся из счётчика [GameState.nextMachineId] и только
@@ -78,7 +122,7 @@ object FactoryBuilder {
             id = state.nextMachineId,
             type = type,
             position = position,
-            facing = DEFAULT_FACING,
+            facing = defaultFacing(state, position),
             level = 0,
             // Рецепт по умолчанию — первый доступный этой машине. Выбор
             // рецепта игроком появится вместе с экраном настройки машины;
@@ -145,17 +189,40 @@ object FactoryBuilder {
     }
 
     /**
-     * Поворот уже проложенной ленты — бесплатно (см. [BeltCatalog.ROTATE_COST]).
+     * Поворот ленты или станка — бесплатно (см. [BeltCatalog.ROTATE_COST]).
      *
-     * Поворачивается только лента: у машины направление задаёт, куда она
-     * выкладывает результат, и смена его на ходу выбросила бы готовый предмет
-     * в стену. Разворот станков появится вместе с их переносом.
+     * Разворот станка меняет только то, куда он выкладывает результат.
+     * Плата за поворот наказывала бы за исправление собственной ошибки и
+     * подталкивала сносить и строить заново, что дороже для игрока и глупее
+     * по смыслу.
+     *
+     * Уже готовый предмет в выходном буфере не теряется: он просто поедет
+     * в новую сторону на следующем такте.
      */
-    fun rotateBelt(state: GameState, position: GridPosition, direction: Direction): GameState {
+    fun rotate(state: GameState, position: GridPosition, direction: Direction): GameState {
+        val machine = state.machineAt(position)
+        if (machine != null) {
+            if (machine.facing == direction) return state
+            val turned = machine.copy(facing = direction)
+            return state.copy(
+                machines = state.machines + (machine.id to turned),
+                grid = state.grid.withMachine(turned),
+            )
+        }
+
         val cell = state.grid[position] ?: return state
         if (!cell.isBelt || cell.direction == direction) return state
-
         return state.copy(grid = state.grid.withBelt(position, direction))
+    }
+
+    /** Совместимость с прежним названием: поворачивает и ленту, и станок. */
+    fun rotateBelt(state: GameState, position: GridPosition, direction: Direction): GameState =
+        rotate(state, position, direction)
+
+    /** Можно ли повернуть содержимое клетки. */
+    fun canRotate(state: GameState, position: GridPosition): Boolean {
+        if (state.machineAt(position) != null) return true
+        return state.grid[position]?.isBelt == true
     }
 
     // ── Снос ────────────────────────────────────────────────────────────────
@@ -167,12 +234,35 @@ object FactoryBuilder {
     }
 
     /**
-     * Снос содержимого ячейки. **Деньги не возвращаются.**
+     * Сколько вернётся за снос содержимого клетки.
      *
-     * Возврат части стоимости — это множитель, которого нет ни в GDD, ни в
-     * балансовой модели; вводить его заодно со сносом значило бы протащить
-     * непроверенное экономическое решение. Без возврата снос честно остаётся
-     * исправлением ошибки, а не способом заработать на перестройке.
+     * Считается от **текущей** цены такой же постройки, а не от той, что
+     * игрок когда-то заплатил: цена зависит от количества уже построенного,
+     * и хранить историю покупок ради этого не стоит. Улучшения не
+     * возвращаются — они потрачены на работу станка.
+     */
+    fun refundFor(state: GameState, position: GridPosition): Long {
+        val machine = state.machineAt(position)
+        if (machine != null) {
+            // Цена «такой же следующей» падает на один шаг: столько машина
+            // стоила бы, будь она последней купленной.
+            val owned = (state.machineCount(machine.type) - 1).coerceAtLeast(0)
+            return (MachineCatalog.buildCost(machine.type, owned) * REFUND_RATE).toLong()
+        }
+        if (state.grid[position]?.isBelt == true) {
+            val owned = (beltCount(state) - 1).coerceAtLeast(0)
+            return (BeltCatalog.buildCost(owned) * REFUND_RATE).toLong()
+        }
+        return 0L
+    }
+
+    /**
+     * Снос содержимого ячейки с частичным возвратом денег.
+     *
+     * Возврата сначала не было вовсе — и это оказалось ошибкой, а не строгим
+     * балансом: игрок, поставивший станок у края поля, оставался с мёртвым
+     * заводом и суммой, которой не хватает на новый. Игра запиралась
+     * без единого сообщения о том, что произошло.
      *
      * Предметы, ехавшие в снесённую клетку или из неё, исчезают вместе с ней:
      * иначе они зависли бы на несуществующей ленте и заблокировали соседей.
@@ -181,7 +271,9 @@ object FactoryBuilder {
         if (!canDemolish(state, position)) return state
 
         val machine = state.machineAt(position)
+        val refund = refundFor(state, position)
         return state.copy(
+            coins = state.coins + refund,
             grid = state.grid.cleared(position),
             machines = if (machine == null) state.machines else state.machines - machine.id,
             movingItems = state.movingItems.filterNot { it.from == position || it.to == position },

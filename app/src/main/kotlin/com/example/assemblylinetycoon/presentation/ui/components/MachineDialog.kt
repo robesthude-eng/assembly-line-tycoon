@@ -51,6 +51,7 @@ const val OFFLINE_CLAIM_BUTTON_TAG = "offline_claim_button"
 fun MachineDialog(
     machine: MachineUiInfo,
     onUpgrade: (machineId: Int) -> Unit,
+    onRotate: (Direction) -> Unit,
     onDemolish: (machineId: Int) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
@@ -83,6 +84,11 @@ fun MachineDialog(
                             .padding(top = 4.dp),
                     )
                 }
+
+                // Куда станок отдаёт результат — главное, что нужно понять
+                // игроку: смотрящий в стену станок выглядит как сломанный.
+                SectionCaption("Выдаёт " + FactoryLabels.direction(machine.facing))
+                DirectionRow(enabled = true, onPick = onRotate, selected = machine.facing)
             }
         },
         confirmButton = {
@@ -102,9 +108,12 @@ fun MachineDialog(
                     onClick = { onDemolish(machine.id) },
                     modifier = Modifier.testTag(DEMOLISH_BUTTON_TAG),
                 ) {
-                    // Снос без возврата денег — так решено в балансе, поэтому
-                    // подпись честно предупреждает, а не обещает компенсацию.
-                    Text("Снести", color = MaterialTheme.colorScheme.error)
+                    // Сумма возврата стоит прямо на кнопке: игрок должен
+                    // видеть цену решения до того, как его примет.
+                    Text(
+                        text = "Снести · +" + NumberFormatter.format(machine.refund),
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
                 TextButton(onClick = onDismiss) { Text("Закрыть") }
             }
@@ -200,6 +209,7 @@ private fun BuildRow(
 fun BeltDialog(
     position: GridPosition,
     direction: Direction,
+    refund: Long,
     onRotate: (Direction) -> Unit,
     onDemolish: () -> Unit,
     onDismiss: () -> Unit,
@@ -224,7 +234,10 @@ fun BeltDialog(
                 onClick = onDemolish,
                 modifier = Modifier.testTag(DEMOLISH_BUTTON_TAG),
             ) {
-                Text("Снести", color = MaterialTheme.colorScheme.error)
+                Text(
+                    text = "Снести · +" + NumberFormatter.format(refund),
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         },
     )
@@ -322,9 +335,12 @@ private fun MachineDialogPreview() {
                 outputItemName = "Железный слиток",
                 craftDurationMillis = 3_400L,
                 upgradeCost = 1_240L,
+                facing = Direction.DOWN,
+                refund = 75L,
                 canAffordUpgrade = true,
             ),
             onUpgrade = {},
+            onRotate = {},
             onDemolish = {},
             onDismiss = {},
         )
@@ -338,6 +354,7 @@ private fun BeltDialogPreview() {
         BeltDialog(
             position = GridPosition(3, 4),
             direction = Direction.RIGHT,
+            refund = 5L,
             onRotate = {},
             onDemolish = {},
             onDismiss = {},

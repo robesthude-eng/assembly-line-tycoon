@@ -92,6 +92,10 @@ data class MachineUiInfo(
     val craftDurationMillis: Long,
     /** Цена следующего уровня — посчитана доменом. */
     val upgradeCost: Long,
+    /** Куда станок выкладывает результат. */
+    val facing: Direction,
+    /** Сколько вернётся при сносе. */
+    val refund: Long,
     /** Хватает ли денег на апгрейд. Сравнение, а не расчёт цены. */
     val canAffordUpgrade: Boolean,
 )
@@ -149,6 +153,8 @@ sealed interface FactoryDialog {
     data class BeltCell(
         val position: GridPosition,
         val direction: Direction,
+        /** Сколько вернётся при сносе. */
+        val refund: Long = 0L,
     ) : FactoryDialog
 }
 

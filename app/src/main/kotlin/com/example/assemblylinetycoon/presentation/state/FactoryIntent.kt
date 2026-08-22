@@ -41,7 +41,7 @@ sealed interface FactoryIntent : UiIntent {
     ) : FactoryIntent
 
     /** Развернуть уже проложенную ленту. */
-    data class RotateBelt(
+    data class Rotate(
         val position: GridPosition,
         val direction: Direction,
     ) : FactoryIntent

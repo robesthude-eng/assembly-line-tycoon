@@ -120,8 +120,8 @@ class FactoryViewModelTest {
                     FactoryBuilder.upgrade(_state.value, command.machineId)
                 is GameCommand.PlaceBelt ->
                     FactoryBuilder.placeBelt(_state.value, command.position, command.direction)
-                is GameCommand.RotateBelt ->
-                    FactoryBuilder.rotateBelt(_state.value, command.position, command.direction)
+                is GameCommand.Rotate ->
+                    FactoryBuilder.rotate(_state.value, command.position, command.direction)
                 is GameCommand.Demolish ->
                     FactoryBuilder.demolish(_state.value, command.position)
                 else -> _state.value
@@ -477,7 +477,7 @@ class FactoryViewModelTest {
         advanceUntilIdle()
         val coinsBefore = viewModel.state.value.coins
 
-        viewModel.onIntent(FactoryIntent.RotateBelt(beltPosition, Direction.UP))
+        viewModel.onIntent(FactoryIntent.Rotate(beltPosition, Direction.UP))
         advanceUntilIdle()
 
         assertEquals(Direction.UP, engine.state.value.grid[beltPosition]!!.direction)
