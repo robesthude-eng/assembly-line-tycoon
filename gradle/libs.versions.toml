@@ -15,6 +15,7 @@ junit = "4.13.2"
 androidxTestExt = "1.2.1"
 espresso = "3.6.1"
 robolectric = "4.14.1"
+roborazzi = "1.43.1"
 
 [libraries]
 # ── AndroidX core ────────────────────────────────────────────────────────────
@@ -56,6 +57,10 @@ androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "a
 androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 # Robolectric даёт запуск Compose-тестов в обычной JVM: эмулятор в CI не нужен.
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+# Roborazzi снимает настоящий кадр Compose в JVM: обычный captureToImage
+# в Robolectric не работает — там нет аппаратного PixelCopy.
+roborazzi = { module = "io.github.takahirom.roborazzi:roborazzi", version.ref = "roborazzi" }
+roborazzi-compose = { module = "io.github.takahirom.roborazzi:roborazzi-compose", version.ref = "roborazzi" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

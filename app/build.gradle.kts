@@ -178,6 +178,11 @@ android {
             isReturnDefaultValues = true
             // Compose-тестам нужны настоящие ресурсы и тема приложения.
             isIncludeAndroidResources = true
+            all {
+                // Roborazzi пишет кадр в файл только при явном разрешении;
+                // флаг нужен именно тестовой JVM, а не Gradle.
+                it.systemProperty("roborazzi.test.record", "true")
+            }
         }
     }
 }
@@ -234,6 +239,8 @@ dependencies {
     testImplementation(libs.androidx.test.ext.junit)
     testImplementation(composeBom)
     testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
