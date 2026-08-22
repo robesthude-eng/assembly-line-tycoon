@@ -2,6 +2,8 @@ package com.example.assemblylinetycoon.presentation.viewmodel
 
 import androidx.lifecycle.viewModelScope
 import com.example.assemblylinetycoon.core.utils.TimeProvider
+import com.example.assemblylinetycoon.domain.engine.FactoryBuilder
+import com.example.assemblylinetycoon.domain.engine.GameCommand
 import com.example.assemblylinetycoon.domain.engine.GameEngine
 import com.example.assemblylinetycoon.domain.usecase.LoadGameStateUseCase
 import com.example.assemblylinetycoon.domain.usecase.ObserveSettingsUseCase
@@ -74,15 +76,9 @@ class FactoryViewModel(
 
             is FactoryIntent.OpenMachineDialog -> openMachineDialog(intent.machineId)
 
-            is FactoryIntent.PlaceMachine -> sendEffect(
-                // Постройка требует списания денег, то есть новой команды движку.
-                // Движок на этом этапе не трогаем — экран лишь готов её отправить.
-                FactoryEffect.NotImplementedYet("Постройка машин"),
-            )
+            is FactoryIntent.PlaceMachine -> placeMachine(intent)
 
-            is FactoryIntent.UpgradeMachine -> sendEffect(
-                FactoryEffect.NotImplementedYet("Улучшение машин"),
-            )
+            is FactoryIntent.UpgradeMachine -> upgradeMachine(intent.machineId)
 
             FactoryIntent.CloseDialog -> setState { copy(dialog = FactoryDialog.None) }
 
@@ -105,10 +101,42 @@ class FactoryViewModel(
                 dialog = if (machine != null) {
                     FactoryDialog.MachineInfo(FactoryUiStateMapper.machineInfo(machine, domain))
                 } else {
-                    FactoryDialog.EmptyCell(intent.position)
+                    FactoryDialog.EmptyCell(
+                        position = intent.position,
+                        options = FactoryUiStateMapper.buildOptions(domain, intent.position),
+                    )
                 },
             )
         }
+    }
+
+    /**
+     * Постройка: проверка «можно ли» и команда движку.
+     *
+     * Деньги списывает движок, он же решает, состоится покупка или нет.
+     * Проверка здесь нужна лишь для внятного сообщения игроку: молча
+     * проглоченное нажатие выглядит как поломка.
+     */
+    private fun placeMachine(intent: FactoryIntent.PlaceMachine) {
+        val domain = gameEngine.state.value
+        if (!FactoryBuilder.canPlace(domain, intent.position, intent.type)) {
+            sendEffect(FactoryEffect.ShowMessage("Не хватает монет"))
+            return
+        }
+
+        gameEngine.dispatch(GameCommand.PlaceMachine(intent.position, intent.type))
+        // Диалог закрывается сам: ячейка перестала быть пустой, и держать
+        // открытым магазин для занятого места незачем.
+        setState { copy(dialog = FactoryDialog.None) }
+    }
+
+    private fun upgradeMachine(machineId: Int) {
+        if (!FactoryBuilder.canUpgrade(gameEngine.state.value, machineId)) {
+            sendEffect(FactoryEffect.ShowMessage("Не хватает монет"))
+            return
+        }
+
+        gameEngine.dispatch(GameCommand.UpgradeMachine(machineId))
     }
 
     private fun openMachineDialog(machineId: Int) {

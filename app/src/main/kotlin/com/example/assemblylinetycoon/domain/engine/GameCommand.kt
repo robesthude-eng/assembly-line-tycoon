@@ -1,6 +1,8 @@
 package com.example.assemblylinetycoon.domain.engine
 
 import com.example.assemblylinetycoon.domain.model.AdPlacement
+import com.example.assemblylinetycoon.domain.model.GridPosition
+import com.example.assemblylinetycoon.domain.model.MachineType
 
 /**
  * Команды, меняющие состояние симуляции.
@@ -16,6 +18,18 @@ sealed interface GameCommand {
 
     /** Начисление офлайн-дохода после расчёта на старте. */
     data class ApplyOfflineEarnings(val coins: Long) : GameCommand
+
+    /**
+     * Построить машину. Цену считает [FactoryBuilder] по каталогу; если денег
+     * не хватает или ячейка занята, состояние остаётся прежним.
+     */
+    data class PlaceMachine(
+        val position: GridPosition,
+        val type: MachineType,
+    ) : GameCommand
+
+    /** Улучшить машину: минус цена следующего уровня, плюс уровень. */
+    data class UpgradeMachine(val machineId: Int) : GameCommand
 
     /** Награда за просмотренный ролик. */
     data class ApplyAdReward(val placement: AdPlacement) : GameCommand

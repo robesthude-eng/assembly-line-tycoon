@@ -15,6 +15,8 @@ import com.example.assemblylinetycoon.presentation.state.BoostUiState
 import com.example.assemblylinetycoon.presentation.state.FactoryDialog
 import com.example.assemblylinetycoon.presentation.state.FactoryRenderModel
 import com.example.assemblylinetycoon.presentation.state.FactoryUiState
+import com.example.assemblylinetycoon.presentation.mapper.FactoryUiStateMapper
+import com.example.assemblylinetycoon.presentation.ui.components.EMPTY_CELL_DIALOG_TAG
 import com.example.assemblylinetycoon.presentation.ui.screens.FACTORY_SCREEN_TAG
 import com.example.assemblylinetycoon.presentation.ui.screens.FactoryScreen
 import com.example.assemblylinetycoon.presentation.ui.theme.AssemblyLineTycoonTheme
@@ -111,6 +113,41 @@ class FactoryScreenshotTest {
         val output = File("build/reports/screenshots/factory-screen.png")
         output.parentFile?.mkdirs()
         compose.onNodeWithTag(FACTORY_SCREEN_TAG).captureRoboImage(output.path)
+
+        assertTrue("Снимок должен быть непустым", output.length() > 0)
+    }
+
+    @Test
+    fun captureBuildDialog() {
+        val position = GridPosition(4, 5)
+        val domain = com.example.assemblylinetycoon.domain.model.GameState.EMPTY.copy(coins = 320L)
+        val state = FactoryUiState(
+            isLoading = false,
+            coins = 320L,
+            coinsPerSecond = 0.8,
+            render = FactoryRenderModel(
+                grid = FactoryGrid.EMPTY,
+                machines = emptyMap(),
+                movingItems = emptyList(),
+                selectedCell = position,
+            ),
+            selectedCell = position,
+            dialog = FactoryDialog.EmptyCell(
+                position = position,
+                options = FactoryUiStateMapper.buildOptions(domain, position),
+            ),
+        )
+
+        compose.setContent {
+            AssemblyLineTycoonTheme(darkTheme = true) {
+                FactoryScreen(state = state, onIntent = {})
+            }
+        }
+        compose.waitForIdle()
+
+        val output = File("build/reports/screenshots/build-dialog.png")
+        output.parentFile?.mkdirs()
+        compose.onNodeWithTag(EMPTY_CELL_DIALOG_TAG).captureRoboImage(output.path)
 
         assertTrue("Снимок должен быть непустым", output.length() > 0)
     }

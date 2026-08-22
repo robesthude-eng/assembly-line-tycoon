@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -20,6 +22,7 @@ import com.example.assemblylinetycoon.core.utils.NumberFormatter
 import com.example.assemblylinetycoon.domain.model.GridPosition
 import com.example.assemblylinetycoon.domain.model.MachineStatus
 import com.example.assemblylinetycoon.domain.model.MachineType
+import com.example.assemblylinetycoon.presentation.state.BuildOptionUi
 import com.example.assemblylinetycoon.presentation.state.MachineUiInfo
 import com.example.assemblylinetycoon.presentation.ui.render.FactoryLabels
 import com.example.assemblylinetycoon.presentation.ui.theme.AssemblyLineTycoonTheme
@@ -91,29 +94,73 @@ fun MachineDialog(
 }
 
 /**
- * Диалог пустой ячейки — точка входа для будущей постройки.
+ * Магазин оборудования для выбранной ячейки.
  *
- * Список машин со стоимостью появится вместе с командой постройки в движке;
- * пока диалог честно говорит, что здесь свободно, и не показывает цен,
- * которых ещё нет в этом слое.
+ * Цены приходят готовыми в [BuildOptionUi]: диалог не знает ни базовой
+ * стоимости, ни множителя роста — он показывает то, что посчитал каталог,
+ * и гасит строки, на которые не хватает денег.
  */
 @Composable
 fun EmptyCellDialog(
     position: GridPosition,
+    options: List<BuildOptionUi>,
+    onBuild: (MachineType) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     AlertDialog(
         modifier = modifier.testTag(EMPTY_CELL_DIALOG_TAG),
         onDismissRequest = onDismiss,
-        title = { Text("Свободная ячейка") },
+        title = { Text("Ячейка ${position.x}, ${position.y}") },
         text = {
-            Text("Ячейка ${position.x}, ${position.y} пуста. Постройка появится на следующем этапе.")
+            if (options.isEmpty()) {
+                Text("Строить пока нечего.")
+            } else {
+                // Список короткий и фиксированный (семь типов машин), поэтому
+                // обычная колонка с прокруткой дешевле LazyColumn в диалоге.
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    options.forEach { option ->
+                        BuildRow(option = option, onBuild = onBuild)
+                    }
+                }
+            }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Понятно") }
+            TextButton(onClick = onDismiss) { Text("Закрыть") }
         },
     )
+}
+
+/** Тег строки магазина: используется UI-тестами. */
+fun buildOptionTag(type: MachineType): String = "build_option_" + type.name
+
+@Composable
+private fun BuildRow(
+    option: BuildOptionUi,
+    onBuild: (MachineType) -> Unit,
+) {
+    TextButton(
+        onClick = { onBuild(option.type) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(buildOptionTag(option.type)),
+        enabled = option.canAfford,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(text = option.name, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = NumberFormatter.format(option.cost),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
 }
 
 @Composable
@@ -131,6 +178,23 @@ private fun InfoRow(caption: String, value: String) {
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Preview(name = "Магазин в пустой ячейке")
+@Composable
+private fun EmptyCellDialogPreview() {
+    AssemblyLineTycoonTheme(darkTheme = true) {
+        EmptyCellDialog(
+            position = GridPosition(4, 5),
+            options = listOf(
+                BuildOptionUi(MachineType.SPAWNER, "Карьер", 50L, canAfford = true),
+                BuildOptionUi(MachineType.SMELTER, "Плавильня", 150L, canAfford = true),
+                BuildOptionUi(MachineType.ASSEMBLER, "Сборщик", 800L, canAfford = false),
+            ),
+            onBuild = {},
+            onDismiss = {},
         )
     }
 }

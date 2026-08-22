@@ -86,6 +86,14 @@ class GameLoop(
             ),
         )
 
+        is GameCommand.PlaceMachine -> FactoryBuilder.place(
+            state = current,
+            position = command.position,
+            type = command.type,
+        )
+
+        is GameCommand.UpgradeMachine -> FactoryBuilder.upgrade(current, command.machineId)
+
         // Награды за рекламу реализуются на этапе монетизации: движок уже
         // принимает команду, чтобы поток данных не пришлось перестраивать.
         is GameCommand.ApplyAdReward -> current

@@ -95,6 +95,19 @@ data class MachineUiInfo(
     val canAffordUpgrade: Boolean,
 )
 
+/**
+ * Строка магазина: что можно поставить в выбранную ячейку и почём.
+ *
+ * Цена приходит из каталога через `FactoryBuilder`; интерфейс её только
+ * показывает и сравнивает с балансом — та же цена спишется движком.
+ */
+data class BuildOptionUi(
+    val type: MachineType,
+    val name: String,
+    val cost: Long,
+    val canAfford: Boolean,
+)
+
 /** Какой диалог открыт поверх завода. */
 sealed interface FactoryDialog {
     /** Диалогов нет. */
@@ -103,8 +116,17 @@ sealed interface FactoryDialog {
     /** Карточка машины. */
     data class MachineInfo(val machine: MachineUiInfo) : FactoryDialog
 
-    /** Пустая ячейка: точка входа для будущей постройки. */
-    data class EmptyCell(val position: GridPosition) : FactoryDialog
+    /**
+     * Пустая ячейка: выбор оборудования для постройки.
+     *
+     * Список вариантов лежит прямо в диалоге, а не в общем состоянии: цены
+     * зависят от того, сколько таких машин уже построено, поэтому пересчёт
+     * нужен ровно на время, пока диалог открыт.
+     */
+    data class EmptyCell(
+        val position: GridPosition,
+        val options: List<BuildOptionUi> = emptyList(),
+    ) : FactoryDialog
 }
 
 /**

@@ -1,6 +1,7 @@
 package com.example.assemblylinetycoon.presentation
 
 import com.example.assemblylinetycoon.core.utils.TimeProvider
+import com.example.assemblylinetycoon.domain.engine.FactoryBuilder
 import com.example.assemblylinetycoon.domain.engine.GameCommand
 import com.example.assemblylinetycoon.domain.engine.GameEngine
 import com.example.assemblylinetycoon.domain.model.Direction
@@ -94,6 +95,15 @@ class FactoryViewModelTest {
 
         override fun dispatch(command: GameCommand) {
             commands += command
+            // Фейк повторяет поведение настоящего движка для команд игрока:
+            // без этого нельзя проверить, что экран показывает результат.
+            _state.value = when (command) {
+                is GameCommand.PlaceMachine ->
+                    FactoryBuilder.place(_state.value, command.position, command.type)
+                is GameCommand.UpgradeMachine ->
+                    FactoryBuilder.upgrade(_state.value, command.machineId)
+                else -> _state.value
+            }
         }
 
         fun emit(state: GameState) {
@@ -269,39 +279,97 @@ class FactoryViewModelTest {
         assertEquals(4_000L, ui.coins)
     }
 
-    @Test // ещё не реализованные действия честно сообщают об этом
-    fun placementAndUpgradeReportNotImplemented() = runTest(dispatcher) {
-        val viewModel = createViewModel(factoryState)
+    @Test // постройка уходит в движок командой и списывает деньги
+    fun placingMachineSendsCommand() = runTest(dispatcher) {
+        val viewModel = createViewModel(factoryState.copy(coins = 10_000L))
+        advanceUntilIdle()
+        val position = GridPosition(7, 7)
+        val cost = FactoryBuilder.buildCost(engine.state.value, MachineType.PRESS)
+
+        viewModel.onIntent(FactoryIntent.PlaceMachine(position, MachineType.PRESS))
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(GameCommand.PlaceMachine(position, MachineType.PRESS)),
+            engine.commands,
+        )
+        assertEquals(10_000L - cost, viewModel.state.value.coins)
+        // Магазин закрывается сам: ячейка перестала быть пустой.
+        assertEquals(FactoryDialog.None, viewModel.state.value.dialog)
+    }
+
+    @Test // без денег команда не уходит, игрок получает сообщение
+    fun placingWithoutCoinsReportsAndSendsNothing() = runTest(dispatcher) {
+        val viewModel = createViewModel(factoryState.copy(coins = 0L))
         val effects = mutableListOf<FactoryEffect>()
-        // UnconfinedTestDispatcher — чтобы подписка на SharedFlow состоялась
-        // немедленно: у эффектов нет буфера воспроизведения, и всё, что
-        // отправлено до появления подписчика, теряется.
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
             viewModel.effects.collect { effects += it }
         }
-
-        viewModel.onIntent(FactoryIntent.PlaceMachine(GridPosition(1, 1), MachineType.SMELTER))
-        viewModel.onIntent(FactoryIntent.UpgradeMachine(smelter.id))
         advanceUntilIdle()
 
-        assertEquals(2, effects.size)
-        assertTrue(effects.all { it is FactoryEffect.NotImplementedYet })
+        viewModel.onIntent(FactoryIntent.PlaceMachine(GridPosition(7, 7), MachineType.ASSEMBLER))
+        advanceUntilIdle()
+
+        assertTrue("Команда не должна уходить движку", engine.commands.isEmpty())
+        assertEquals(1, effects.size)
+        assertTrue(effects.single() is FactoryEffect.ShowMessage)
     }
 
-    @Test // ViewModel не трогает симуляцию: никаких команд движку не уходит
-    fun viewModelDoesNotSimulate() = runTest(dispatcher) {
-        val viewModel = createViewModel(factoryState)
+    @Test // улучшение уходит в движок и поднимает уровень
+    fun upgradingSendsCommand() = runTest(dispatcher) {
+        val viewModel = createViewModel(factoryState.copy(coins = 1_000_000L))
         advanceUntilIdle()
 
-        viewModel.onIntent(FactoryIntent.SelectCell(smelter.position))
-        viewModel.onIntent(FactoryIntent.PlaceMachine(GridPosition(1, 1), MachineType.PRESS))
         viewModel.onIntent(FactoryIntent.UpgradeMachine(smelter.id))
         advanceUntilIdle()
 
-        // Состояние игры меняет только движок. Пока команд постройки нет,
-        // экран обязан оставить симуляцию нетронутой.
+        assertEquals(listOf(GameCommand.UpgradeMachine(smelter.id)), engine.commands)
+        assertEquals(smelter.level + 1, engine.state.value.machines.getValue(smelter.id).level)
+    }
+
+    @Test // улучшение без денег не уходит движку
+    fun upgradingWithoutCoinsReportsAndSendsNothing() = runTest(dispatcher) {
+        val viewModel = createViewModel(factoryState.copy(coins = 0L))
+        advanceUntilIdle()
+
+        viewModel.onIntent(FactoryIntent.UpgradeMachine(smelter.id))
+        advanceUntilIdle()
+
         assertTrue(engine.commands.isEmpty())
-        assertEquals(factoryState.machines, engine.state.value.machines)
-        assertEquals(factoryState.coins, engine.state.value.coins)
+    }
+
+    @Test // магазин пустой ячейки показывает каталожные цены
+    fun emptyCellDialogListsCatalogPrices() = runTest(dispatcher) {
+        val viewModel = createViewModel(factoryState.copy(coins = 200L))
+        advanceUntilIdle()
+
+        viewModel.onIntent(FactoryIntent.SelectCell(GridPosition(8, 8)))
+        advanceUntilIdle()
+
+        val dialog = viewModel.state.value.dialog as FactoryDialog.EmptyCell
+        assertEquals(MachineType.entries.size, dialog.options.size)
+        val spawner = dialog.options.first { it.type == MachineType.SPAWNER }
+        assertEquals(MachineType.SPAWNER.baseCost, spawner.cost)
+        assertTrue("На карьер за 50 монет хватает 200", spawner.canAfford)
+        assertTrue(
+            "На сборщик за 800 монет 200 не хватает",
+            !dialog.options.first { it.type == MachineType.ASSEMBLER }.canAfford,
+        )
+    }
+
+    @Test // экран меняет состояние только командами, а не напрямую
+    fun viewModelChangesStateOnlyThroughCommands() = runTest(dispatcher) {
+        val viewModel = createViewModel(factoryState.copy(coins = 1_000_000L))
+        advanceUntilIdle()
+        val before = engine.state.value
+
+        // Выделение и открытие диалога — дело экрана, симуляции они не касаются.
+        viewModel.onIntent(FactoryIntent.SelectCell(smelter.position))
+        viewModel.onIntent(FactoryIntent.OpenMachineDialog(smelter.id))
+        viewModel.onIntent(FactoryIntent.CloseDialog)
+        advanceUntilIdle()
+
+        assertTrue("Просмотр не должен трогать движок", engine.commands.isEmpty())
+        assertEquals(before, engine.state.value)
     }
 }

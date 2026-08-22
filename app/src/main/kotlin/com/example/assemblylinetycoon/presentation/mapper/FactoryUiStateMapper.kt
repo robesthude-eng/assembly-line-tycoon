@@ -3,14 +3,18 @@ package com.example.assemblylinetycoon.presentation.mapper
 import com.example.assemblylinetycoon.domain.catalog.ItemCatalog
 import com.example.assemblylinetycoon.domain.catalog.MachineCatalog
 import com.example.assemblylinetycoon.domain.catalog.RecipeCatalog
+import com.example.assemblylinetycoon.domain.engine.FactoryBuilder
 import com.example.assemblylinetycoon.domain.model.GameState
 import com.example.assemblylinetycoon.domain.model.GridPosition
 import com.example.assemblylinetycoon.domain.model.Machine
+import com.example.assemblylinetycoon.domain.model.MachineType
 import com.example.assemblylinetycoon.presentation.state.BoostUiState
+import com.example.assemblylinetycoon.presentation.state.BuildOptionUi
 import com.example.assemblylinetycoon.presentation.state.FactoryDialog
 import com.example.assemblylinetycoon.presentation.state.FactoryRenderModel
 import com.example.assemblylinetycoon.presentation.state.FactoryUiState
 import com.example.assemblylinetycoon.presentation.state.MachineUiInfo
+import com.example.assemblylinetycoon.presentation.ui.render.FactoryLabels
 
 /**
  * Перевод состояния симуляции в состояние экрана.
@@ -85,12 +89,30 @@ object FactoryUiStateMapper {
             is FactoryDialog.MachineInfo -> domain.machines[dialog.machine.id]
                 ?.let { FactoryDialog.MachineInfo(machineInfo(it, domain)) }
                 ?: FactoryDialog.None   // машину снесли, пока диалог был открыт
-            is FactoryDialog.EmptyCell -> if (domain.machineAt(dialog.position) == null) {
-                dialog
+            is FactoryDialog.EmptyCell -> if (FactoryBuilder.isBuildable(domain, dialog.position)) {
+                // Пересобираем цены: после покупки следующая такая машина
+                // дороже, а денег стало меньше — кнопки должны это отразить.
+                dialog.copy(options = buildOptions(domain, dialog.position))
             } else {
                 FactoryDialog.None      // в ячейке уже что-то построили
             }
             FactoryDialog.None -> FactoryDialog.None
+        }
+
+    /**
+     * Строки магазина для конкретной ячейки.
+     *
+     * Ни цена, ни доступность здесь не вычисляются: и то и другое спрашивается
+     * у `FactoryBuilder`, то есть у того же кода, который спишет деньги.
+     */
+    fun buildOptions(domain: GameState, position: GridPosition): List<BuildOptionUi> =
+        FactoryBuilder.purchasableTypes().map { type: MachineType ->
+            BuildOptionUi(
+                type = type,
+                name = FactoryLabels.machineName(type),
+                cost = FactoryBuilder.buildCost(domain, type),
+                canAfford = FactoryBuilder.canPlace(domain, position, type),
+            )
         }
 
     /** Карточка машины: значения берутся у домена, здесь только раскладка. */
@@ -111,7 +133,8 @@ object FactoryUiStateMapper {
             outputItemName = machine.recipeOutputId?.let { ItemCatalog.find(it)?.displayName },
             craftDurationMillis = duration,
             upgradeCost = upgradeCost,
-            canAffordUpgrade = domain.coins >= upgradeCost,
+            // Тот же предикат, что проверит движок при списании денег.
+            canAffordUpgrade = FactoryBuilder.canUpgrade(domain, machine.id),
         )
     }
 }

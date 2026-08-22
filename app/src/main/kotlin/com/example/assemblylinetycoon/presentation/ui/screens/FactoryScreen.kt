@@ -158,6 +158,8 @@ private fun FactoryDialogs(
 
         is FactoryDialog.EmptyCell -> EmptyCellDialog(
             position = dialog.position,
+            options = dialog.options,
+            onBuild = { type -> onIntent(FactoryIntent.PlaceMachine(dialog.position, type)) },
             onDismiss = { onIntent(FactoryIntent.CloseDialog) },
         )
     }

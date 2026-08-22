@@ -5,6 +5,7 @@ import com.example.assemblylinetycoon.core.dispatcher.DispatcherProvider
 import com.example.assemblylinetycoon.core.utils.MathUtility
 import com.example.assemblylinetycoon.core.utils.TimeProvider
 import com.example.assemblylinetycoon.domain.catalog.RecipeCatalog
+import com.example.assemblylinetycoon.domain.engine.FactoryBuilder
 import com.example.assemblylinetycoon.domain.engine.GameCommand
 import com.example.assemblylinetycoon.domain.engine.GameLoop
 import com.example.assemblylinetycoon.domain.model.Direction
@@ -212,6 +213,37 @@ class GameLoopTest {
             runCurrent()
 
             assertEquals(beforeStop, loop.state.value.stats.simulatedMillis)
+        }
+    }
+
+    @Test // команда постройки доходит до состояния и списывает деньги
+    fun placeMachineCommandBuildsAndCharges() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        withLoop(dispatcher, FakeTimeProvider()) { loop ->
+            loop.start(GameState.EMPTY.copy(coins = 10_000L, isInitialized = true))
+            val position = GridPosition(4, 4)
+            val cost = FactoryBuilder.buildCost(loop.state.value, MachineType.SMELTER)
+
+            loop.dispatch(GameCommand.PlaceMachine(position, MachineType.SMELTER))
+
+            val state = loop.state.value
+            assertEquals(10_000L - cost, state.coins)
+            assertEquals(MachineType.SMELTER, state.machineAt(position)?.type)
+        }
+    }
+
+    @Test // команда улучшения поднимает уровень построенной машины
+    fun upgradeMachineCommandRaisesLevel() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        withLoop(dispatcher, FakeTimeProvider()) { loop ->
+            loop.start(GameState.EMPTY.copy(coins = 100_000L, isInitialized = true))
+            val position = GridPosition(4, 4)
+            loop.dispatch(GameCommand.PlaceMachine(position, MachineType.SMELTER))
+            val machineId = loop.state.value.machineAt(position)!!.id
+
+            loop.dispatch(GameCommand.UpgradeMachine(machineId))
+
+            assertEquals(1, loop.state.value.machines.getValue(machineId).level)
         }
     }
 

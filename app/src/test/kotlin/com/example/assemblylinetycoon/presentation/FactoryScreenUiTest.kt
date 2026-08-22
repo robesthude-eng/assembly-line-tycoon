@@ -25,6 +25,7 @@ import com.example.assemblylinetycoon.presentation.state.FactoryRenderModel
 import com.example.assemblylinetycoon.presentation.state.FactoryUiState
 import com.example.assemblylinetycoon.presentation.state.MachineUiInfo
 import com.example.assemblylinetycoon.presentation.ui.components.EMPTY_CELL_DIALOG_TAG
+import com.example.assemblylinetycoon.presentation.ui.components.buildOptionTag
 import com.example.assemblylinetycoon.presentation.ui.components.FACTORY_CANVAS_TAG
 import com.example.assemblylinetycoon.presentation.ui.components.HUD_BOOST_TAG
 import com.example.assemblylinetycoon.presentation.ui.components.HUD_COINS_TAG
@@ -100,6 +101,17 @@ class FactoryScreenUiTest {
         boost = BoostUiState(isOverdriveActive = false, remainingMillis = 0L),
     )
 
+    /** Магазин с реальными каталожными ценами: 200 монет в кармане. */
+    private fun shopDialog(): FactoryDialog.EmptyCell {
+        val position = GridPosition(5, 5)
+        val domain = com.example.assemblylinetycoon.domain.model.GameState.EMPTY.copy(coins = 200L)
+        return FactoryDialog.EmptyCell(
+            position = position,
+            options = com.example.assemblylinetycoon.presentation.mapper.FactoryUiStateMapper
+                .buildOptions(domain, position),
+        )
+    }
+
     private fun show(
         state: FactoryUiState,
         onIntent: (FactoryIntent) -> Unit = {},
@@ -170,11 +182,30 @@ class FactoryScreenUiTest {
         assertEquals(FactoryIntent.UpgradeMachine(smelter.id), intents.single())
     }
 
-    @Test // пустая ячейка открывает заготовку постройки
-    fun emptyCellDialogIsShown() {
-        show(uiState(dialog = FactoryDialog.EmptyCell(GridPosition(5, 5))))
+    @Test // пустая ячейка открывает магазин с ценами
+    fun emptyCellDialogListsMachinesWithPrices() {
+        show(uiState(dialog = shopDialog()))
 
         compose.onNodeWithTag(EMPTY_CELL_DIALOG_TAG).assertIsDisplayed()
+        compose.onNodeWithTag(buildOptionTag(MachineType.SPAWNER)).assertIsEnabled()
+        compose.onNodeWithText("Карьер").assertIsDisplayed()
+        compose.onNodeWithText("50").assertIsDisplayed()
+        // На сборщик денег не хватает — строка неактивна.
+        compose.onNodeWithTag(buildOptionTag(MachineType.ASSEMBLER)).assertIsNotEnabled()
+    }
+
+    @Test // выбор машины в магазине уходит намерением постройки
+    fun buildingSendsPlaceIntent() {
+        val intents = mutableListOf<FactoryIntent>()
+        show(uiState(dialog = shopDialog()), onIntent = intents::add)
+
+        compose.onNodeWithTag(buildOptionTag(MachineType.SMELTER)).performClick()
+        compose.waitForIdle()
+
+        assertEquals(
+            FactoryIntent.PlaceMachine(GridPosition(5, 5), MachineType.SMELTER),
+            intents.single(),
+        )
     }
 
     @Test // холст переживает полный завод с движущимися предметами
