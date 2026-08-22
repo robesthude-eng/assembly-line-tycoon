@@ -1,27 +1,34 @@
 package com.example.assemblylinetycoon.presentation.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.TextMeasurer
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import com.example.assemblylinetycoon.core.constants.GameConstants
 import com.example.assemblylinetycoon.domain.catalog.ItemCatalog
 import com.example.assemblylinetycoon.domain.model.Cell
 import com.example.assemblylinetycoon.domain.model.CellType
@@ -30,12 +37,13 @@ import com.example.assemblylinetycoon.domain.model.GridPosition
 import com.example.assemblylinetycoon.domain.model.ItemShape
 import com.example.assemblylinetycoon.domain.model.Machine
 import com.example.assemblylinetycoon.domain.model.MachineStatus
-import com.example.assemblylinetycoon.domain.model.MachineType
 import com.example.assemblylinetycoon.domain.model.MovingItem
 import com.example.assemblylinetycoon.presentation.state.FactoryRenderModel
 import com.example.assemblylinetycoon.presentation.ui.render.FactoryGeometry
-import com.example.assemblylinetycoon.presentation.ui.render.FactoryLabels
 import com.example.assemblylinetycoon.presentation.ui.render.FactoryPalette
+import com.example.assemblylinetycoon.presentation.ui.render.FactorySprites
+import com.example.assemblylinetycoon.presentation.ui.render.rememberFactorySprites
+import kotlin.math.roundToInt
 
 /** Тег для UI-тестов: холст завода. */
 const val FACTORY_CANVAS_TAG = "factory_canvas"
@@ -79,12 +87,12 @@ fun FactoryCanvas(
             )
         }
 
-        val textMeasurer = rememberTextMeasurer()
-        // Значки машин измеряются один раз на размер клетки, а не каждый кадр:
-        // разметка текста — самая дорогая операция в этой отрисовке.
-        val glyphs = remember(geometry.cellSize, textMeasurer) {
-            measureGlyphs(textMeasurer, geometry.cellSize)
-        }
+        val sprites = rememberFactorySprites()
+
+        // Фаза бега ленты. Это State, который читается **внутри** блока
+        // отрисовки: так смена кадра перерисовывает холст, но не запускает
+        // рекомпозицию всего экрана двадцать раз в секунду.
+        val beltPhase = rememberBeltPhase()
 
         Canvas(
             modifier = Modifier
@@ -96,31 +104,41 @@ fun FactoryCanvas(
                     }
                 },
         ) {
-            drawFactory(model, geometry, glyphs)
+            drawFactory(model, geometry, sprites, beltPhase.value)
         }
     }
 }
 
-private fun measureGlyphs(
-    measurer: TextMeasurer,
-    cellSize: Float,
-): Map<MachineType, TextLayoutResult> {
-    if (cellSize <= 0f) return emptyMap()
-    val style = TextStyle(
-        fontSize = (cellSize * 0.30f).coerceIn(8f, 22f).sp,
-        fontWeight = FontWeight.Bold,
-        color = FactoryPalette.machineText,
+/**
+ * Бесконечная прокрутка кадров ленты.
+ *
+ * Длительность цикла привязана к времени проезда предмета по клетке
+ * (`BELT_TRAVEL_TIME_MS`): планки ленты должны двигаться с той же скоростью,
+ * что и груз на них, иначе картинка выглядит рассинхронизированной с игрой.
+ */
+@Composable
+private fun rememberBeltPhase(): State<Float> {
+    val transition = rememberInfiniteTransition(label = "belt")
+    return transition.animateFloat(
+        initialValue = 0f,
+        targetValue = BELT_FRAMES.toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = GameConstants.BELT_TRAVEL_TIME_MS.toInt(),
+                easing = LinearEasing,
+            ),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "belt_phase",
     )
-    return MachineType.entries.associateWith { type ->
-        measurer.measure(text = FactoryLabels.machineGlyph(type), style = style)
-    }
 }
 
 /** Порядок слоёв: поле → ленты → машины → предметы → выделение. */
 private fun DrawScope.drawFactory(
     model: FactoryRenderModel,
     geometry: FactoryGeometry,
-    glyphs: Map<MachineType, TextLayoutResult>,
+    sprites: FactorySprites,
+    beltPhase: Float,
 ) {
     if (geometry.cellSize <= 0f) return
 
@@ -131,103 +149,122 @@ private fun DrawScope.drawFactory(
         for (x in 0 until grid.width) {
             val position = GridPosition(x, y)
             val cell = grid[position] ?: continue
-            drawCell(position, cell, geometry)
+            drawCell(position, cell, geometry, sprites, beltPhase)
         }
     }
 
     model.machines.values.forEach { machine ->
-        drawMachine(machine, geometry, glyphs[machine.type])
+        drawMachine(machine, geometry, sprites.machines[machine.type])
     }
 
     model.movingItems.forEach { item ->
-        drawMovingItem(item, geometry)
+        drawMovingItem(item, geometry, sprites)
     }
 
     model.selectedCell?.let { drawSelection(it, geometry) }
 }
 
-private fun DrawScope.drawCell(position: GridPosition, cell: Cell, geometry: FactoryGeometry) {
-    val cellSize = geometry.cellSize
-    val topLeft = Offset(geometry.left(position.x), geometry.top(position.y))
-    val cellArea = Size(cellSize, cellSize)
+private fun DrawScope.drawCell(
+    position: GridPosition,
+    cell: Cell,
+    geometry: FactoryGeometry,
+    sprites: FactorySprites,
+    beltPhase: Float,
+) {
+    // Пол рисуется под всем: и под лентой, и под станками. Так между
+    // клетками не остаётся дыр, чем бы игрок ни застроил поле.
+    drawSprite(sprites.floor, position, geometry)
 
     when (cell.type) {
-        CellType.EMPTY -> {
-            drawRect(color = FactoryPalette.emptyCell, topLeft = topLeft, size = cellArea)
-            drawRect(
-                color = FactoryPalette.gridLine,
-                topLeft = topLeft,
-                size = cellArea,
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1f),
-            )
-        }
+        CellType.EMPTY -> Unit
 
-        CellType.BELT -> {
-            val inset = cellSize * 0.08f
-            drawRect(
-                color = FactoryPalette.belt,
-                topLeft = Offset(topLeft.x + inset, topLeft.y + inset),
-                size = Size(cellSize - inset * 2, cellSize - inset * 2),
-            )
-            drawBeltArrow(position, cell.direction, geometry)
-        }
+        CellType.BELT -> drawBelt(position, cell.direction, geometry, sprites, beltPhase)
 
-        // Клетки машин рисует drawMachine: цвет и значок зависят от самой
-        // машины, а не только от типа ячейки.
+        // Клетки машин рисует drawMachine: спрайт зависит от самой машины,
+        // а не только от типа ячейки.
         CellType.MACHINE, CellType.SPAWNER, CellType.EXPORTER -> Unit
     }
 }
 
-/** Стрелка направления ленты: без неё поле нечитаемо, когда предметы не едут. */
-private fun DrawScope.drawBeltArrow(
+/**
+ * Лента с бегущими планками.
+ *
+ * Хранится и рисуется одна ориентация — «вправо», остальные получаются
+ * поворотом холста. Четыре набора кадров на каждое направление означали бы
+ * шестнадцать картинок вместо четырёх и столько же способов разойтись
+ * между собой при правке.
+ */
+private fun DrawScope.drawBelt(
     position: GridPosition,
     direction: Direction,
     geometry: FactoryGeometry,
+    sprites: FactorySprites,
+    beltPhase: Float,
 ) {
-    val cx = geometry.centerX(position.x)
-    val cy = geometry.centerY(position.y)
-    val arm = geometry.cellSize * 0.22f
+    val frame = sprites.beltFrame(beltPhase.toInt())
+    val pivot = Offset(geometry.centerX(position.x), geometry.centerY(position.y))
 
-    val tip = Offset(cx + direction.dx * arm, cy + direction.dy * arm)
-    // Основание стрелки — отрезок, перпендикулярный направлению движения.
-    val backX = cx - direction.dx * arm * 0.6f
-    val backY = cy - direction.dy * arm * 0.6f
-    val sideX = direction.dy * arm * 0.55f
-    val sideY = direction.dx * arm * 0.55f
-
-    val path = Path().apply {
-        moveTo(tip.x, tip.y)
-        lineTo(backX + sideX, backY + sideY)
-        lineTo(backX - sideX, backY - sideY)
-        close()
+    rotate(degrees = direction.degrees, pivot = pivot) {
+        drawSprite(frame, position, geometry)
     }
-    drawPath(path = path, color = FactoryPalette.beltArrow)
 }
+
+/** Отрисовка картинки ровно по границам клетки. */
+private fun DrawScope.drawSprite(
+    image: ImageBitmap,
+    position: GridPosition,
+    geometry: FactoryGeometry,
+    scale: Float = 1f,
+    colorFilter: ColorFilter? = null,
+) {
+    val side = (geometry.cellSize * scale).roundToInt()
+    if (side <= 0) return
+    val inset = (geometry.cellSize - side) / 2f
+
+    drawImage(
+        image = image,
+        dstOffset = IntOffset(
+            x = (geometry.left(position.x) + inset).roundToInt(),
+            y = (geometry.top(position.y) + inset).roundToInt(),
+        ),
+        dstSize = IntSize(side, side),
+        // Клетка почти всегда мельче исходного спрайта, и билинейная
+        // фильтрация здесь честнее «пиксель-в-пиксель»: без неё края
+        // станков рвутся на нецелых масштабах.
+        filterQuality = FilterQuality.Medium,
+        colorFilter = colorFilter,
+    )
+}
+
+/** Угол поворота ленты относительно базовой ориентации «вправо». */
+private val Direction.degrees: Float
+    get() = when (this) {
+        Direction.RIGHT -> 0f
+        Direction.DOWN -> 90f
+        Direction.LEFT -> 180f
+        Direction.UP -> 270f
+    }
 
 private fun DrawScope.drawMachine(
     machine: Machine,
     geometry: FactoryGeometry,
-    glyph: TextLayoutResult?,
+    sprite: ImageBitmap?,
 ) {
     val cellSize = geometry.cellSize
     val inset = cellSize * 0.06f
     val topLeft = Offset(geometry.left(machine.position.x) + inset, geometry.top(machine.position.y) + inset)
     val body = Size(cellSize - inset * 2, cellSize - inset * 2)
 
-    drawRoundRect(
-        color = FactoryPalette.machine(machine.type),
-        topLeft = topLeft,
-        size = body,
-        cornerRadius = androidx.compose.ui.geometry.CornerRadius(cellSize * 0.14f),
-    )
-
-    glyph?.let {
-        drawText(
-            textLayoutResult = it,
-            topLeft = Offset(
-                x = topLeft.x + (body.width - it.size.width) / 2f,
-                y = topLeft.y + (body.height - it.size.height) / 2f - cellSize * 0.06f,
-            ),
+    if (sprite != null) {
+        drawSprite(sprite, machine.position, geometry, scale = 0.94f)
+    } else {
+        // Ассет для типа не завезли — рисуем корпус цветом, но не падаем:
+        // отсутствие картинки не повод показать игроку пустое поле.
+        drawRoundRect(
+            color = FactoryPalette.machine(machine.type),
+            topLeft = topLeft,
+            size = body,
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(cellSize * 0.14f),
         )
     }
 
@@ -314,46 +351,44 @@ private fun progressFraction(machine: Machine): Float {
     return machine.progress(duration)
 }
 
-private fun DrawScope.drawMovingItem(item: MovingItem, geometry: FactoryGeometry) {
+/**
+ * Груз на ленте.
+ *
+ * Положение берётся из состояния и интерполируется по доле пути, а не
+ * накапливается в рендерере: иначе картинка «уезжала» бы от симуляции на
+ * пропущенных кадрах.
+ *
+ * Спрайт выбирается по форме из каталога и **тонируется** цветом предмета.
+ * Тон накладывается умножением, поэтому нарисованная в ассете светотень
+ * сохраняется: медный провод отличается от железного слитка цветом, а не
+ * отдельной картинкой.
+ */
+private fun DrawScope.drawMovingItem(
+    item: MovingItem,
+    geometry: FactoryGeometry,
+    sprites: FactorySprites,
+) {
     val x = geometry.interpolateX(item.from, item.to, item.progress)
     val y = geometry.interpolateY(item.from, item.to, item.progress)
-    val radius = geometry.cellSize * 0.16f
     val color = FactoryPalette.item(item.itemId)
     val shape = ItemCatalog.find(item.itemId)?.visual?.shape ?: ItemShape.CIRCLE
+    val sprite = sprites.items[shape]
 
-    when (shape) {
-        ItemShape.CIRCLE -> drawCircle(color = color, radius = radius, center = Offset(x, y))
-        ItemShape.SQUARE -> drawRect(
-            color = color,
-            topLeft = Offset(x - radius, y - radius),
-            size = Size(radius * 2, radius * 2),
+    val side = geometry.cellSize * 0.42f
+    if (sprite != null) {
+        drawImage(
+            image = sprite,
+            dstOffset = IntOffset((x - side / 2f).roundToInt(), (y - side / 2f).roundToInt()),
+            dstSize = IntSize(side.roundToInt(), side.roundToInt()),
+            filterQuality = FilterQuality.Medium,
+            colorFilter = ColorFilter.tint(color, BlendMode.Modulate),
         )
-        ItemShape.TRIANGLE -> drawPath(
-            path = trianglePath(x, y, radius),
-            color = color,
-        )
-        ItemShape.HEXAGON -> drawRoundRect(
-            color = color,
-            topLeft = Offset(x - radius, y - radius * 0.85f),
-            size = Size(radius * 2, radius * 1.7f),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius * 0.5f),
-        )
+        return
     }
 
-    // Тонкая обводка отделяет предмет от ленты того же оттенка.
-    drawCircle(
-        color = Color.Black.copy(alpha = 0.25f),
-        radius = radius,
-        center = Offset(x, y),
-        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5f),
-    )
-}
-
-private fun trianglePath(x: Float, y: Float, radius: Float): Path = Path().apply {
-    moveTo(x, y - radius)
-    lineTo(x + radius, y + radius * 0.8f)
-    lineTo(x - radius, y + radius * 0.8f)
-    close()
+    // Без ассета груз всё равно должен быть виден: без этого пропажа файла
+    // выглядела бы как «предметы не едут», то есть как поломка симуляции.
+    drawCircle(color = color, radius = side / 2f, center = Offset(x, y))
 }
 
 private fun DrawScope.drawSelection(position: GridPosition, geometry: FactoryGeometry) {
@@ -368,3 +403,11 @@ private fun DrawScope.drawSelection(position: GridPosition, geometry: FactoryGeo
 }
 
 private const val MAX_LEVEL_DOTS = 5
+
+/**
+ * Кадров в цикле бега ленты.
+ *
+ * Ровно столько, сколько файлов `tile_belt_*`: планки в них сдвинуты на
+ * четверть шага, поэтому прокрутка по кругу даёт непрерывное движение.
+ */
+private const val BELT_FRAMES = 4
