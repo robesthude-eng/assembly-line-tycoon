@@ -1,12 +1,15 @@
 package com.example.assemblylinetycoon.domain.engine
 
+import com.example.assemblylinetycoon.domain.catalog.BeltCatalog
 import com.example.assemblylinetycoon.domain.catalog.MachineCatalog
 import com.example.assemblylinetycoon.domain.catalog.RecipeCatalog
 import com.example.assemblylinetycoon.domain.model.CellType
 import com.example.assemblylinetycoon.domain.model.Direction
 import com.example.assemblylinetycoon.domain.model.GameState
 import com.example.assemblylinetycoon.domain.model.GridPosition
+import com.example.assemblylinetycoon.domain.model.ItemId
 import com.example.assemblylinetycoon.domain.model.MachineType
+import com.example.assemblylinetycoon.domain.model.MovingItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -204,6 +207,179 @@ class FactoryBuilderTest {
     fun upgradingUnknownMachineIsIgnored() {
         assertNull(FactoryBuilder.upgradeCost(richState, machineId = 42))
         assertSame(richState, FactoryBuilder.upgrade(richState, machineId = 42))
+    }
+
+    // ── Конвейер ────────────────────────────────────────────────────────────
+
+    @Test // первая лента стоит базовую цену каталога
+    fun firstBeltCostsBasePrice() {
+        assertEquals(BeltCatalog.BASE_COST, FactoryBuilder.beltCost(richState))
+    }
+
+    @Test // прокладка списывает деньги и ставит ленту нужным направлением
+    fun placingBeltChargesAndSetsDirection() {
+        val cost = FactoryBuilder.beltCost(richState)
+
+        val after = FactoryBuilder.placeBelt(richState, cell, Direction.DOWN)
+
+        assertEquals(richState.coins - cost, after.coins)
+        assertEquals(CellType.BELT, after.grid[cell]!!.type)
+        assertEquals(Direction.DOWN, after.grid[cell]!!.direction)
+    }
+
+    @Test // цена ленты растёт ступенями и никогда не падает
+    fun beltCostNeverFallsAndGrowsOverTheField() {
+        val costs = (0..89).map { BeltCatalog.buildCost(ownedCount = it) }
+
+        // Надбавка в 3 % от 10 монет меньше единицы, а цена усекается вниз,
+        // поэтому соседние отрезки часто стоят одинаково — но не дешевле.
+        costs.zipWithNext().forEach { (previous, next) ->
+            assertTrue("Цена ленты не должна падать: $previous → $next", next >= previous)
+        }
+        assertTrue("За поле цена обязана заметно вырасти", costs.last() > costs.first() * 5)
+    }
+
+    @Test // проложенные ленты учитываются в цене следующей
+    fun beltCostCountsPlacedSegments() {
+        val afterOne = FactoryBuilder.placeBelt(richState, cell, Direction.RIGHT)
+
+        assertEquals(1, FactoryBuilder.beltCount(afterOne))
+        assertEquals(BeltCatalog.buildCost(ownedCount = 1), FactoryBuilder.beltCost(afterOne))
+    }
+
+    @Test // лента дешевле самой дешёвой машины: соединять станки не должно быть дороже, чем строить их
+    fun beltIsCheaperThanAnyMachine() {
+        val cheapestMachine = MachineType.entries.minOf { it.baseCost }
+
+        assertTrue(BeltCatalog.BASE_COST < cheapestMachine)
+    }
+
+    @Test // цена ленты растёт мягче машинной: полем 10x10 её не разорить
+    fun beltCostStaysReasonableOnFullField() {
+        // 90 лент — почти всё поле, свободное от машин.
+        val ninetieth = BeltCatalog.buildCost(ownedCount = 89)
+
+        assertTrue("Девяностая лента не должна стоить как завод: $ninetieth", ninetieth < 1_000L)
+    }
+
+    @Test // без денег ленту не проложить
+    fun placingBeltWithoutCoinsIsRejected() {
+        val poor = GameState.EMPTY.copy(coins = 0L)
+
+        assertSame(poor, FactoryBuilder.placeBelt(poor, cell, Direction.RIGHT))
+    }
+
+    @Test // в занятую ячейку ленту не проложить
+    fun placingBeltOnOccupiedCellIsRejected() {
+        val withMachine = FactoryBuilder.place(richState, cell, MachineType.SMELTER)
+
+        assertSame(withMachine, FactoryBuilder.placeBelt(withMachine, cell, Direction.RIGHT))
+    }
+
+    @Test // поворот ленты бесплатен
+    fun rotatingBeltIsFree() {
+        val withBelt = FactoryBuilder.placeBelt(richState, cell, Direction.RIGHT)
+
+        val rotated = FactoryBuilder.rotateBelt(withBelt, cell, Direction.UP)
+
+        assertEquals(withBelt.coins, rotated.coins)
+        assertEquals(Direction.UP, rotated.grid[cell]!!.direction)
+        assertEquals(0L, BeltCatalog.ROTATE_COST)
+    }
+
+    @Test // поворот машины не выполняется: направление задаёт выход результата
+    fun rotatingMachineIsIgnored() {
+        val withMachine = FactoryBuilder.place(richState, cell, MachineType.SMELTER)
+
+        assertSame(withMachine, FactoryBuilder.rotateBelt(withMachine, cell, Direction.UP))
+    }
+
+    // ── Снос ────────────────────────────────────────────────────────────────
+
+    @Test // снос ленты освобождает ячейку и не возвращает денег
+    fun demolishingBeltFreesCellWithoutRefund() {
+        val withBelt = FactoryBuilder.placeBelt(richState, cell, Direction.RIGHT)
+
+        val cleared = FactoryBuilder.demolish(withBelt, cell)
+
+        assertTrue(cleared.grid[cell]!!.isEmpty)
+        assertEquals("Возврата денег за снос нет", withBelt.coins, cleared.coins)
+        assertTrue(FactoryBuilder.isBuildable(cleared, cell))
+    }
+
+    @Test // снос машины убирает её и из списка, и с поля
+    fun demolishingMachineRemovesItEverywhere() {
+        val built = FactoryBuilder.place(richState, cell, MachineType.SMELTER)
+        val id = built.machineAt(cell)!!.id
+
+        val cleared = FactoryBuilder.demolish(built, cell)
+
+        assertTrue(cleared.machines.isEmpty())
+        assertNull(cleared.machines[id])
+        assertTrue(cleared.grid[cell]!!.isEmpty)
+    }
+
+    @Test // после сноса цена такой же машины снова базовая
+    fun demolishingRestoresBuildCost() {
+        val built = FactoryBuilder.place(richState, cell, MachineType.SMELTER)
+        val cleared = FactoryBuilder.demolish(built, cell)
+
+        assertEquals(
+            MachineCatalog.buildCost(MachineType.SMELTER, ownedCount = 0),
+            FactoryBuilder.buildCost(cleared, MachineType.SMELTER),
+        )
+    }
+
+    @Test // предметы на снесённой ленте исчезают вместе с ней
+    fun demolishingDropsItemsOnTheCell() {
+        val withBelt = FactoryBuilder.placeBelt(richState, cell, Direction.RIGHT)
+        val neighbour = GridPosition(cell.x + 1, cell.y)
+        val busy = withBelt.copy(
+            movingItems = listOf(
+                MovingItem(ItemId.IRON_ORE.key, 1, cell, neighbour, 0.3f),
+                MovingItem(ItemId.IRON_ORE.key, 1, GridPosition(0, 0), GridPosition(1, 0), 0.2f),
+            ),
+        )
+
+        val cleared = FactoryBuilder.demolish(busy, cell)
+
+        // Остался только предмет, не связанный со снесённой клеткой: иначе он
+        // завис бы на несуществующей ленте и заблокировал соседей.
+        assertEquals(1, cleared.movingItems.size)
+        assertEquals(GridPosition(0, 0), cleared.movingItems.single().from)
+    }
+
+    @Test // сносить пустую ячейку нечего
+    fun demolishingEmptyCellIsIgnored() {
+        assertTrue(!FactoryBuilder.canDemolish(richState, cell))
+        assertSame(richState, FactoryBuilder.demolish(richState, cell))
+    }
+
+    @Test // стартового капитала хватает на минимальную работающую линию
+    fun startingCoinsCoverMinimalProductionLine() {
+        var state = GameState.NEW_GAME
+
+        // Карьер → четыре ленты → экспортёр: самая короткая цепочка,
+        // которая уже приносит деньги.
+        state = FactoryBuilder.place(state, GridPosition(1, 1), MachineType.SPAWNER)
+        (2..5).forEach { x ->
+            state = FactoryBuilder.placeBelt(state, GridPosition(x, 1), Direction.RIGHT)
+        }
+        state = FactoryBuilder.place(state, GridPosition(6, 1), MachineType.EXPORTER)
+
+        assertEquals("Карьер должен построиться", MachineType.SPAWNER, state.machineAt(GridPosition(1, 1))?.type)
+        assertEquals("Экспортёр должен построиться", MachineType.EXPORTER, state.machineAt(GridPosition(6, 1))?.type)
+        assertEquals(4, FactoryBuilder.beltCount(state))
+        assertTrue("Баланс не может уйти в минус", state.coins >= 0L)
+    }
+
+    @Test // новая игра не начинается с нуля: иначе первый экран — тупик
+    fun newGameHasStartingCapital() {
+        assertTrue(GameState.NEW_GAME.coins > 0L)
+        assertTrue(
+            "Стартовых денег должно хватать хотя бы на карьер",
+            GameState.NEW_GAME.coins >= MachineType.SPAWNER.baseCost,
+        )
     }
 
     @Test // магазин предлагает все типы машин, от дешёвых к дорогим

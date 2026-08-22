@@ -1,11 +1,14 @@
 package com.example.assemblylinetycoon.domain.engine
 
+import com.example.assemblylinetycoon.domain.catalog.BeltCatalog
 import com.example.assemblylinetycoon.domain.catalog.MachineCatalog
 import com.example.assemblylinetycoon.domain.catalog.RecipeCatalog
 import com.example.assemblylinetycoon.domain.model.Direction
 import com.example.assemblylinetycoon.domain.model.GameState
 import com.example.assemblylinetycoon.domain.model.GridPosition
 import com.example.assemblylinetycoon.domain.model.Machine
+import com.example.assemblylinetycoon.domain.model.Cell
+import com.example.assemblylinetycoon.domain.model.CellType
 import com.example.assemblylinetycoon.domain.model.MachineType
 
 /**
@@ -118,4 +121,74 @@ object FactoryBuilder {
 
     /** Список доступного к постройке оборудования, от дешёвого к дорогому. */
     fun purchasableTypes(): List<MachineType> = MachineCatalog.purchasable()
+
+    // ── Конвейер ────────────────────────────────────────────────────────────
+
+    /** Сколько отрезков ленты уже проложено — вход для расчёта цены. */
+    fun beltCount(state: GameState): Int = state.grid.cells.count { it.isBelt }
+
+    /** Цена следующего отрезка конвейера. */
+    fun beltCost(state: GameState): Long = BeltCatalog.buildCost(beltCount(state))
+
+    /** Можно ли проложить ленту: место свободно и денег хватает. */
+    fun canPlaceBelt(state: GameState, position: GridPosition): Boolean =
+        isBuildable(state, position) && state.coins >= beltCost(state)
+
+    /** Прокладка отрезка конвейера. */
+    fun placeBelt(state: GameState, position: GridPosition, direction: Direction): GameState {
+        if (!canPlaceBelt(state, position)) return state
+
+        return state.copy(
+            coins = state.coins - beltCost(state),
+            grid = state.grid.withBelt(position, direction),
+        )
+    }
+
+    /**
+     * Поворот уже проложенной ленты — бесплатно (см. [BeltCatalog.ROTATE_COST]).
+     *
+     * Поворачивается только лента: у машины направление задаёт, куда она
+     * выкладывает результат, и смена его на ходу выбросила бы готовый предмет
+     * в стену. Разворот станков появится вместе с их переносом.
+     */
+    fun rotateBelt(state: GameState, position: GridPosition, direction: Direction): GameState {
+        val cell = state.grid[position] ?: return state
+        if (!cell.isBelt || cell.direction == direction) return state
+
+        return state.copy(grid = state.grid.withBelt(position, direction))
+    }
+
+    // ── Снос ────────────────────────────────────────────────────────────────
+
+    /** Есть ли в ячейке что сносить. */
+    fun canDemolish(state: GameState, position: GridPosition): Boolean {
+        val cell = state.grid[position] ?: return false
+        return !cell.isEmpty
+    }
+
+    /**
+     * Снос содержимого ячейки. **Деньги не возвращаются.**
+     *
+     * Возврат части стоимости — это множитель, которого нет ни в GDD, ни в
+     * балансовой модели; вводить его заодно со сносом значило бы протащить
+     * непроверенное экономическое решение. Без возврата снос честно остаётся
+     * исправлением ошибки, а не способом заработать на перестройке.
+     *
+     * Предметы, ехавшие в снесённую клетку или из неё, исчезают вместе с ней:
+     * иначе они зависли бы на несуществующей ленте и заблокировали соседей.
+     */
+    fun demolish(state: GameState, position: GridPosition): GameState {
+        if (!canDemolish(state, position)) return state
+
+        val machine = state.machineAt(position)
+        return state.copy(
+            grid = state.grid.cleared(position),
+            machines = if (machine == null) state.machines else state.machines - machine.id,
+            movingItems = state.movingItems.filterNot { it.from == position || it.to == position },
+        )
+    }
+
+    /** Что стоит в ячейке — для выбора нужного диалога. */
+    fun cellTypeAt(state: GameState, position: GridPosition): CellType =
+        (state.grid[position] ?: Cell.EMPTY_CELL).type
 }

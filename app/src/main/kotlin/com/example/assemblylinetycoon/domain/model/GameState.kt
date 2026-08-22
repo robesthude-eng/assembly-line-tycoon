@@ -77,7 +77,18 @@ data class GameState(
     fun isOverdriveActive(nowMillis: Long): Boolean = overdriveUntilMillis > nowMillis
 
     companion object {
-        /** Состояние новой игры. */
+        /** Пустое состояние: ноль во всех полях. Используется в тестах и как база. */
         val EMPTY: GameState = GameState()
+
+        /**
+         * Состояние новой игры.
+         *
+         * Отличается от [EMPTY] стартовым капиталом: без него первый экран
+         * игры — тупик, потому что строить не на что, а зарабатывать нечем.
+         */
+        val NEW_GAME: GameState = GameState(
+            coins = GameConstants.STARTING_COINS,
+            isInitialized = true,
+        )
     }
 }

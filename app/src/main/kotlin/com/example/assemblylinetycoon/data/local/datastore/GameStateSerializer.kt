@@ -21,7 +21,7 @@ class GameStateSerializer(
     private val json: Json = SerializationConfig.json,
 ) : Serializer<GameState> {
 
-    override val defaultValue: GameState = GameState.EMPTY
+    override val defaultValue: GameState = GameState.NEW_GAME
 
     override suspend fun readFrom(input: InputStream): GameState =
         try {

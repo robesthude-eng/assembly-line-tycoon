@@ -1,5 +1,6 @@
 package com.example.assemblylinetycoon.presentation.state
 
+import com.example.assemblylinetycoon.domain.model.Direction
 import com.example.assemblylinetycoon.domain.model.FactoryGrid
 import com.example.assemblylinetycoon.domain.model.GridPosition
 import com.example.assemblylinetycoon.domain.model.Machine
@@ -126,6 +127,15 @@ sealed interface FactoryDialog {
     data class EmptyCell(
         val position: GridPosition,
         val options: List<BuildOptionUi> = emptyList(),
+        /** Цена отрезка конвейера — она общая для всех четырёх направлений. */
+        val beltCost: Long = 0L,
+        val canAffordBelt: Boolean = false,
+    ) : FactoryDialog
+
+    /** Проложенная лента: развернуть или снести. */
+    data class BeltCell(
+        val position: GridPosition,
+        val direction: Direction,
     ) : FactoryDialog
 }
 

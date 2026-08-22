@@ -31,7 +31,7 @@ object DataStoreProvider {
         scope: CoroutineScope,
     ): DataStore<GameState> = DataStoreFactory.create(
         serializer = GameStateSerializer(),
-        corruptionHandler = ReplaceFileCorruptionHandler { GameState.EMPTY },
+        corruptionHandler = ReplaceFileCorruptionHandler { GameState.NEW_GAME },
         scope = scope,
         produceFile = { context.dataStoreFile(GAME_STATE_FILE) },
     )

@@ -92,12 +92,30 @@ object FactoryUiStateMapper {
             is FactoryDialog.EmptyCell -> if (FactoryBuilder.isBuildable(domain, dialog.position)) {
                 // Пересобираем цены: после покупки следующая такая машина
                 // дороже, а денег стало меньше — кнопки должны это отразить.
-                dialog.copy(options = buildOptions(domain, dialog.position))
+                emptyCellDialog(domain, dialog.position)
             } else {
                 FactoryDialog.None      // в ячейке уже что-то построили
             }
+
+            is FactoryDialog.BeltCell -> {
+                val cell = domain.grid[dialog.position]
+                if (cell?.isBelt == true) {
+                    dialog.copy(direction = cell.direction)
+                } else {
+                    FactoryDialog.None  // ленту снесли, пока диалог был открыт
+                }
+            }
             FactoryDialog.None -> FactoryDialog.None
         }
+
+    /** Диалог свободной ячейки: лента и оборудование с актуальными ценами. */
+    fun emptyCellDialog(domain: GameState, position: GridPosition): FactoryDialog.EmptyCell =
+        FactoryDialog.EmptyCell(
+            position = position,
+            options = buildOptions(domain, position),
+            beltCost = FactoryBuilder.beltCost(domain),
+            canAffordBelt = FactoryBuilder.canPlaceBelt(domain, position),
+        )
 
     /**
      * Строки магазина для конкретной ячейки.

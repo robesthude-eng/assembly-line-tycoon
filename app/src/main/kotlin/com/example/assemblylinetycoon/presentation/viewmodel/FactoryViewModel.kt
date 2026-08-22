@@ -5,6 +5,7 @@ import com.example.assemblylinetycoon.core.utils.TimeProvider
 import com.example.assemblylinetycoon.domain.engine.FactoryBuilder
 import com.example.assemblylinetycoon.domain.engine.GameCommand
 import com.example.assemblylinetycoon.domain.engine.GameEngine
+import com.example.assemblylinetycoon.domain.model.GridPosition
 import com.example.assemblylinetycoon.domain.usecase.LoadGameStateUseCase
 import com.example.assemblylinetycoon.domain.usecase.ObserveSettingsUseCase
 import com.example.assemblylinetycoon.domain.usecase.SaveGameStateUseCase
@@ -80,6 +81,16 @@ class FactoryViewModel(
 
             is FactoryIntent.UpgradeMachine -> upgradeMachine(intent.machineId)
 
+            is FactoryIntent.PlaceBelt -> placeBelt(intent)
+
+            is FactoryIntent.RotateBelt -> gameEngine.dispatch(
+                // Поворот бесплатен, проверять нечего: движок сам откажет,
+                // если ленту успели снести.
+                GameCommand.RotateBelt(intent.position, intent.direction),
+            )
+
+            is FactoryIntent.Demolish -> demolish(intent.position)
+
             FactoryIntent.CloseDialog -> setState { copy(dialog = FactoryDialog.None) }
 
             FactoryIntent.ErrorDismissed -> setState { copy(errorMessage = null) }
@@ -96,15 +107,20 @@ class FactoryViewModel(
         if (!domain.grid.contains(intent.position)) return
 
         val machine = domain.machineAt(intent.position)
+        val cell = domain.grid[intent.position]
         setState {
             FactoryUiStateMapper.withSelectedCell(this, intent.position, domain).copy(
-                dialog = if (machine != null) {
-                    FactoryDialog.MachineInfo(FactoryUiStateMapper.machineInfo(machine, domain))
-                } else {
-                    FactoryDialog.EmptyCell(
-                        position = intent.position,
-                        options = FactoryUiStateMapper.buildOptions(domain, intent.position),
+                dialog = when {
+                    machine != null -> FactoryDialog.MachineInfo(
+                        FactoryUiStateMapper.machineInfo(machine, domain),
                     )
+
+                    cell?.isBelt == true -> FactoryDialog.BeltCell(
+                        position = intent.position,
+                        direction = cell.direction,
+                    )
+
+                    else -> FactoryUiStateMapper.emptyCellDialog(domain, intent.position)
                 },
             )
         }
@@ -127,6 +143,24 @@ class FactoryViewModel(
         gameEngine.dispatch(GameCommand.PlaceMachine(intent.position, intent.type))
         // Диалог закрывается сам: ячейка перестала быть пустой, и держать
         // открытым магазин для занятого места незачем.
+        setState { copy(dialog = FactoryDialog.None) }
+    }
+
+    private fun placeBelt(intent: FactoryIntent.PlaceBelt) {
+        if (!FactoryBuilder.canPlaceBelt(gameEngine.state.value, intent.position)) {
+            sendEffect(FactoryEffect.ShowMessage("Не хватает монет"))
+            return
+        }
+
+        gameEngine.dispatch(GameCommand.PlaceBelt(intent.position, intent.direction))
+        setState { copy(dialog = FactoryDialog.None) }
+    }
+
+    private fun demolish(position: GridPosition) {
+        if (!FactoryBuilder.canDemolish(gameEngine.state.value, position)) return
+
+        gameEngine.dispatch(GameCommand.Demolish(position))
+        // Диалог показывает то, чего больше нет, — закрываем его сами.
         setState { copy(dialog = FactoryDialog.None) }
     }
 

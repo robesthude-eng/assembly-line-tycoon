@@ -31,7 +31,7 @@ class GameRepositoryImpl(
 
     override suspend fun clear() {
         withContext(dispatchers.io) {
-            dataStore.updateData { GameState.EMPTY }
+            dataStore.updateData { GameState.NEW_GAME }
         }
     }
 }

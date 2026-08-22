@@ -33,6 +33,7 @@ import com.example.assemblylinetycoon.presentation.state.FactoryEffect
 import com.example.assemblylinetycoon.presentation.state.FactoryIntent
 import com.example.assemblylinetycoon.presentation.state.FactoryRenderModel
 import com.example.assemblylinetycoon.presentation.state.FactoryUiState
+import com.example.assemblylinetycoon.presentation.ui.components.BeltDialog
 import com.example.assemblylinetycoon.presentation.ui.components.EmptyCellDialog
 import com.example.assemblylinetycoon.presentation.ui.components.FactoryCanvas
 import com.example.assemblylinetycoon.presentation.ui.components.FactoryHud
@@ -153,13 +154,29 @@ private fun FactoryDialogs(
         is FactoryDialog.MachineInfo -> MachineDialog(
             machine = dialog.machine,
             onUpgrade = { id -> onIntent(FactoryIntent.UpgradeMachine(id)) },
+            onDemolish = { onIntent(FactoryIntent.Demolish(dialog.machine.position)) },
             onDismiss = { onIntent(FactoryIntent.CloseDialog) },
         )
 
         is FactoryDialog.EmptyCell -> EmptyCellDialog(
             position = dialog.position,
             options = dialog.options,
+            beltCost = dialog.beltCost,
+            canAffordBelt = dialog.canAffordBelt,
             onBuild = { type -> onIntent(FactoryIntent.PlaceMachine(dialog.position, type)) },
+            onPlaceBelt = { direction ->
+                onIntent(FactoryIntent.PlaceBelt(dialog.position, direction))
+            },
+            onDismiss = { onIntent(FactoryIntent.CloseDialog) },
+        )
+
+        is FactoryDialog.BeltCell -> BeltDialog(
+            position = dialog.position,
+            direction = dialog.direction,
+            onRotate = { direction ->
+                onIntent(FactoryIntent.RotateBelt(dialog.position, direction))
+            },
+            onDemolish = { onIntent(FactoryIntent.Demolish(dialog.position)) },
             onDismiss = { onIntent(FactoryIntent.CloseDialog) },
         )
     }

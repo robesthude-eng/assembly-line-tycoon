@@ -94,11 +94,25 @@ class GameLoop(
 
         is GameCommand.UpgradeMachine -> FactoryBuilder.upgrade(current, command.machineId)
 
+        is GameCommand.PlaceBelt -> FactoryBuilder.placeBelt(
+            state = current,
+            position = command.position,
+            direction = command.direction,
+        )
+
+        is GameCommand.RotateBelt -> FactoryBuilder.rotateBelt(
+            state = current,
+            position = command.position,
+            direction = command.direction,
+        )
+
+        is GameCommand.Demolish -> FactoryBuilder.demolish(current, command.position)
+
         // Награды за рекламу реализуются на этапе монетизации: движок уже
         // принимает команду, чтобы поток данных не пришлось перестраивать.
         is GameCommand.ApplyAdReward -> current
 
-        GameCommand.ResetProgress -> GameState.EMPTY
+        GameCommand.ResetProgress -> GameState.NEW_GAME
     }
 
     /** Освобождение ресурсов при уничтожении владельца движка. */

@@ -25,7 +25,10 @@ import com.example.assemblylinetycoon.presentation.state.FactoryRenderModel
 import com.example.assemblylinetycoon.presentation.state.FactoryUiState
 import com.example.assemblylinetycoon.presentation.state.MachineUiInfo
 import com.example.assemblylinetycoon.presentation.ui.components.EMPTY_CELL_DIALOG_TAG
+import com.example.assemblylinetycoon.presentation.ui.components.BELT_DIALOG_TAG
+import com.example.assemblylinetycoon.presentation.ui.components.DEMOLISH_BUTTON_TAG
 import com.example.assemblylinetycoon.presentation.ui.components.buildOptionTag
+import com.example.assemblylinetycoon.presentation.ui.components.directionButtonTag
 import com.example.assemblylinetycoon.presentation.ui.components.FACTORY_CANVAS_TAG
 import com.example.assemblylinetycoon.presentation.ui.components.HUD_BOOST_TAG
 import com.example.assemblylinetycoon.presentation.ui.components.HUD_COINS_TAG
@@ -105,11 +108,8 @@ class FactoryScreenUiTest {
     private fun shopDialog(): FactoryDialog.EmptyCell {
         val position = GridPosition(5, 5)
         val domain = com.example.assemblylinetycoon.domain.model.GameState.EMPTY.copy(coins = 200L)
-        return FactoryDialog.EmptyCell(
-            position = position,
-            options = com.example.assemblylinetycoon.presentation.mapper.FactoryUiStateMapper
-                .buildOptions(domain, position),
-        )
+        return com.example.assemblylinetycoon.presentation.mapper.FactoryUiStateMapper
+            .emptyCellDialog(domain, position)
     }
 
     private fun show(
@@ -192,6 +192,57 @@ class FactoryScreenUiTest {
         compose.onNodeWithText("50").assertIsDisplayed()
         // На сборщик денег не хватает — строка неактивна.
         compose.onNodeWithTag(buildOptionTag(MachineType.ASSEMBLER)).assertIsNotEnabled()
+    }
+
+    @Test // в магазине есть конвейер с ценой и четырьмя направлениями
+    fun shopOffersBeltInFourDirections() {
+        val intents = mutableListOf<FactoryIntent>()
+        show(uiState(dialog = shopDialog()), onIntent = intents::add)
+
+        compose.onNodeWithTag(directionButtonTag(Direction.DOWN)).performClick()
+        compose.waitForIdle()
+
+        assertEquals(
+            FactoryIntent.PlaceBelt(GridPosition(5, 5), Direction.DOWN),
+            intents.single(),
+        )
+    }
+
+    @Test // диалог ленты позволяет развернуть и снести
+    fun beltDialogRotatesAndDemolishes() {
+        val position = GridPosition(3, 2)
+        val intents = mutableListOf<FactoryIntent>()
+        show(
+            uiState(dialog = FactoryDialog.BeltCell(position, Direction.RIGHT)),
+            onIntent = intents::add,
+        )
+
+        compose.onNodeWithTag(BELT_DIALOG_TAG).assertIsDisplayed()
+        // Текущее направление выбирать бессмысленно — кнопка погашена.
+        compose.onNodeWithTag(directionButtonTag(Direction.RIGHT)).assertIsNotEnabled()
+
+        compose.onNodeWithTag(directionButtonTag(Direction.UP)).performClick()
+        compose.onNodeWithTag(DEMOLISH_BUTTON_TAG).performClick()
+        compose.waitForIdle()
+
+        assertEquals(
+            listOf(
+                FactoryIntent.RotateBelt(position, Direction.UP),
+                FactoryIntent.Demolish(position),
+            ),
+            intents,
+        )
+    }
+
+    @Test // карточка машины умеет сносить
+    fun machineDialogDemolishes() {
+        val intents = mutableListOf<FactoryIntent>()
+        show(uiState(dialog = FactoryDialog.MachineInfo(machineInfo)), onIntent = intents::add)
+
+        compose.onNodeWithTag(DEMOLISH_BUTTON_TAG).performClick()
+        compose.waitForIdle()
+
+        assertEquals(FactoryIntent.Demolish(smelter.position), intents.single())
     }
 
     @Test // выбор машины в магазине уходит намерением постройки

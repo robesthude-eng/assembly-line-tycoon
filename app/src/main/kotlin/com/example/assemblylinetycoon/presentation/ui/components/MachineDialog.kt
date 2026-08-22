@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.assemblylinetycoon.core.utils.NumberFormatter
+import com.example.assemblylinetycoon.domain.model.Direction
 import com.example.assemblylinetycoon.domain.model.GridPosition
 import com.example.assemblylinetycoon.domain.model.MachineStatus
 import com.example.assemblylinetycoon.domain.model.MachineType
@@ -31,6 +32,8 @@ import com.example.assemblylinetycoon.presentation.ui.theme.AssemblyLineTycoonTh
 const val MACHINE_DIALOG_TAG = "machine_dialog"
 const val MACHINE_DIALOG_UPGRADE_TAG = "machine_dialog_upgrade"
 const val EMPTY_CELL_DIALOG_TAG = "empty_cell_dialog"
+const val BELT_DIALOG_TAG = "belt_dialog"
+const val DEMOLISH_BUTTON_TAG = "demolish_button"
 
 /**
  * Карточка машины.
@@ -43,6 +46,7 @@ const val EMPTY_CELL_DIALOG_TAG = "empty_cell_dialog"
 fun MachineDialog(
     machine: MachineUiInfo,
     onUpgrade: (machineId: Int) -> Unit,
+    onDemolish: (machineId: Int) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -88,7 +92,17 @@ fun MachineDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Закрыть") }
+            Row {
+                TextButton(
+                    onClick = { onDemolish(machine.id) },
+                    modifier = Modifier.testTag(DEMOLISH_BUTTON_TAG),
+                ) {
+                    // Снос без возврата денег — так решено в балансе, поэтому
+                    // подпись честно предупреждает, а не обещает компенсацию.
+                    Text("Снести", color = MaterialTheme.colorScheme.error)
+                }
+                TextButton(onClick = onDismiss) { Text("Закрыть") }
+            }
         },
     )
 }
@@ -104,7 +118,10 @@ fun MachineDialog(
 fun EmptyCellDialog(
     position: GridPosition,
     options: List<BuildOptionUi>,
+    beltCost: Long,
+    canAffordBelt: Boolean,
     onBuild: (MachineType) -> Unit,
+    onPlaceBelt: (Direction) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -122,6 +139,10 @@ fun EmptyCellDialog(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
+                    SectionCaption("Конвейер · ${NumberFormatter.format(beltCost)}")
+                    DirectionRow(enabled = canAffordBelt, onPick = onPlaceBelt)
+
+                    SectionCaption("Оборудование")
                     options.forEach { option ->
                         BuildRow(option = option, onBuild = onBuild)
                     }
@@ -163,6 +184,85 @@ private fun BuildRow(
     }
 }
 
+/**
+ * Диалог проложенной ленты: развернуть или снести.
+ *
+ * Поворот показан теми же четырьмя стрелками, что и прокладка: одно и то же
+ * действие не должно выглядеть по-разному в зависимости от того, есть уже
+ * лента в ячейке или нет.
+ */
+@Composable
+fun BeltDialog(
+    position: GridPosition,
+    direction: Direction,
+    onRotate: (Direction) -> Unit,
+    onDemolish: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AlertDialog(
+        modifier = modifier.testTag(BELT_DIALOG_TAG),
+        onDismissRequest = onDismiss,
+        title = { Text("Конвейер ${position.x}, ${position.y}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                InfoRow("Направление", FactoryLabels.direction(direction))
+                SectionCaption("Развернуть")
+                DirectionRow(enabled = true, onPick = onRotate, selected = direction)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Закрыть") }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDemolish,
+                modifier = Modifier.testTag(DEMOLISH_BUTTON_TAG),
+            ) {
+                Text("Снести", color = MaterialTheme.colorScheme.error)
+            }
+        },
+    )
+}
+
+/** Тег кнопки направления: используется UI-тестами. */
+fun directionButtonTag(direction: Direction): String = "direction_" + direction.name
+
+@Composable
+private fun DirectionRow(
+    enabled: Boolean,
+    onPick: (Direction) -> Unit,
+    selected: Direction? = null,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+    ) {
+        Direction.entries.forEach { direction ->
+            TextButton(
+                onClick = { onPick(direction) },
+                modifier = Modifier.testTag(directionButtonTag(direction)),
+                enabled = enabled && direction != selected,
+            ) {
+                Text(
+                    text = FactoryLabels.directionArrow(direction),
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionCaption(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
 @Composable
 private fun InfoRow(caption: String, value: String) {
     Row(
@@ -193,7 +293,10 @@ private fun EmptyCellDialogPreview() {
                 BuildOptionUi(MachineType.SMELTER, "Плавильня", 150L, canAfford = true),
                 BuildOptionUi(MachineType.ASSEMBLER, "Сборщик", 800L, canAfford = false),
             ),
+            beltCost = 10L,
+            canAffordBelt = true,
             onBuild = {},
+            onPlaceBelt = {},
             onDismiss = {},
         )
     }
@@ -217,6 +320,21 @@ private fun MachineDialogPreview() {
                 canAffordUpgrade = true,
             ),
             onUpgrade = {},
+            onDemolish = {},
+            onDismiss = {},
+        )
+    }
+}
+
+@Preview(name = "Диалог конвейера")
+@Composable
+private fun BeltDialogPreview() {
+    AssemblyLineTycoonTheme(darkTheme = true) {
+        BeltDialog(
+            position = GridPosition(3, 4),
+            direction = Direction.RIGHT,
+            onRotate = {},
+            onDemolish = {},
             onDismiss = {},
         )
     }

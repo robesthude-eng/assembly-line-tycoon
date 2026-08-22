@@ -1,5 +1,6 @@
 package com.example.assemblylinetycoon.presentation.ui.render
 
+import com.example.assemblylinetycoon.domain.model.Direction
 import com.example.assemblylinetycoon.domain.model.MachineStatus
 import com.example.assemblylinetycoon.domain.model.MachineType
 
@@ -40,6 +41,22 @@ object FactoryLabels {
         MachineType.ASSEMBLER -> "СБ"
         MachineType.QUALITY_GATE -> "КК"
         MachineType.EXPORTER -> "ЭК"
+    }
+
+    /** Куда толкает лента. */
+    fun direction(direction: Direction): String = when (direction) {
+        Direction.UP -> "Вверх"
+        Direction.DOWN -> "Вниз"
+        Direction.LEFT -> "Влево"
+        Direction.RIGHT -> "Вправо"
+    }
+
+    /** Стрелка направления: короче слова и читается на кнопке. */
+    fun directionArrow(direction: Direction): String = when (direction) {
+        Direction.UP -> "↑"
+        Direction.DOWN -> "↓"
+        Direction.LEFT -> "←"
+        Direction.RIGHT -> "→"
     }
 
     /** Что машина делает прямо сейчас. */

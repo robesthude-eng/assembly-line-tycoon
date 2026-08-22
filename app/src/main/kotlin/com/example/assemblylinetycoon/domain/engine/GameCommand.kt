@@ -1,6 +1,7 @@
 package com.example.assemblylinetycoon.domain.engine
 
 import com.example.assemblylinetycoon.domain.model.AdPlacement
+import com.example.assemblylinetycoon.domain.model.Direction
 import com.example.assemblylinetycoon.domain.model.GridPosition
 import com.example.assemblylinetycoon.domain.model.MachineType
 
@@ -30,6 +31,21 @@ sealed interface GameCommand {
 
     /** Улучшить машину: минус цена следующего уровня, плюс уровень. */
     data class UpgradeMachine(val machineId: Int) : GameCommand
+
+    /** Проложить отрезок конвейера. */
+    data class PlaceBelt(
+        val position: GridPosition,
+        val direction: Direction,
+    ) : GameCommand
+
+    /** Повернуть уже проложенную ленту; бесплатно. */
+    data class RotateBelt(
+        val position: GridPosition,
+        val direction: Direction,
+    ) : GameCommand
+
+    /** Снести содержимое ячейки без возврата денег. */
+    data class Demolish(val position: GridPosition) : GameCommand
 
     /** Награда за просмотренный ролик. */
     data class ApplyAdReward(val placement: AdPlacement) : GameCommand

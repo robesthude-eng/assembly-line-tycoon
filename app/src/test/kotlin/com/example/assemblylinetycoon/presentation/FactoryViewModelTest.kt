@@ -102,6 +102,12 @@ class FactoryViewModelTest {
                     FactoryBuilder.place(_state.value, command.position, command.type)
                 is GameCommand.UpgradeMachine ->
                     FactoryBuilder.upgrade(_state.value, command.machineId)
+                is GameCommand.PlaceBelt ->
+                    FactoryBuilder.placeBelt(_state.value, command.position, command.direction)
+                is GameCommand.RotateBelt ->
+                    FactoryBuilder.rotateBelt(_state.value, command.position, command.direction)
+                is GameCommand.Demolish ->
+                    FactoryBuilder.demolish(_state.value, command.position)
                 else -> _state.value
             }
         }
@@ -355,6 +361,81 @@ class FactoryViewModelTest {
             "На сборщик за 800 монет 200 не хватает",
             !dialog.options.first { it.type == MachineType.ASSEMBLER }.canAfford,
         )
+    }
+
+    @Test // прокладка ленты уходит командой и списывает каталожную цену
+    fun placingBeltSendsCommand() = runTest(dispatcher) {
+        val viewModel = createViewModel(factoryState.copy(coins = 1_000L))
+        advanceUntilIdle()
+        val position = GridPosition(6, 6)
+        val cost = FactoryBuilder.beltCost(engine.state.value)
+
+        viewModel.onIntent(FactoryIntent.PlaceBelt(position, Direction.DOWN))
+        advanceUntilIdle()
+
+        assertEquals(listOf(GameCommand.PlaceBelt(position, Direction.DOWN)), engine.commands)
+        assertEquals(1_000L - cost, viewModel.state.value.coins)
+        assertEquals(Direction.DOWN, engine.state.value.grid[position]!!.direction)
+    }
+
+    @Test // касание ленты открывает диалог поворота, а не магазин
+    fun tappingBeltOpensBeltDialog() = runTest(dispatcher) {
+        val beltPosition = GridPosition(3, 2)
+        val viewModel = createViewModel(factoryState)
+        advanceUntilIdle()
+
+        viewModel.onIntent(FactoryIntent.SelectCell(beltPosition))
+        advanceUntilIdle()
+
+        val dialog = viewModel.state.value.dialog as FactoryDialog.BeltCell
+        assertEquals(beltPosition, dialog.position)
+        assertEquals(Direction.RIGHT, dialog.direction)
+    }
+
+    @Test // поворот бесплатен и меняет направление ленты
+    fun rotatingBeltIsFreeAndUpdatesDialog() = runTest(dispatcher) {
+        val beltPosition = GridPosition(3, 2)
+        val viewModel = createViewModel(factoryState)
+        advanceUntilIdle()
+        viewModel.onIntent(FactoryIntent.SelectCell(beltPosition))
+        advanceUntilIdle()
+        val coinsBefore = viewModel.state.value.coins
+
+        viewModel.onIntent(FactoryIntent.RotateBelt(beltPosition, Direction.UP))
+        advanceUntilIdle()
+
+        assertEquals(Direction.UP, engine.state.value.grid[beltPosition]!!.direction)
+        assertEquals(coinsBefore, viewModel.state.value.coins)
+        // Диалог остался открытым и показывает новое направление.
+        assertEquals(Direction.UP, (viewModel.state.value.dialog as FactoryDialog.BeltCell).direction)
+    }
+
+    @Test // снос убирает машину и закрывает диалог
+    fun demolishingClosesDialog() = runTest(dispatcher) {
+        val viewModel = createViewModel(factoryState)
+        advanceUntilIdle()
+        viewModel.onIntent(FactoryIntent.SelectCell(smelter.position))
+        advanceUntilIdle()
+
+        viewModel.onIntent(FactoryIntent.Demolish(smelter.position))
+        advanceUntilIdle()
+
+        assertEquals(listOf(GameCommand.Demolish(smelter.position)), engine.commands)
+        assertTrue(engine.state.value.machines.isEmpty())
+        assertEquals(FactoryDialog.None, viewModel.state.value.dialog)
+    }
+
+    @Test // магазин показывает цену ленты вместе с ценами машин
+    fun emptyCellDialogShowsBeltPrice() = runTest(dispatcher) {
+        val viewModel = createViewModel(factoryState.copy(coins = 200L))
+        advanceUntilIdle()
+
+        viewModel.onIntent(FactoryIntent.SelectCell(GridPosition(8, 8)))
+        advanceUntilIdle()
+
+        val dialog = viewModel.state.value.dialog as FactoryDialog.EmptyCell
+        assertEquals(FactoryBuilder.beltCost(engine.state.value), dialog.beltCost)
+        assertTrue(dialog.canAffordBelt)
     }
 
     @Test // экран меняет состояние только командами, а не напрямую

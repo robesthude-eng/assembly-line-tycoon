@@ -121,6 +121,7 @@ class FactoryScreenshotTest {
     fun captureBuildDialog() {
         val position = GridPosition(4, 5)
         val domain = com.example.assemblylinetycoon.domain.model.GameState.EMPTY.copy(coins = 320L)
+        // Диалог собирает маппер — снимок показывает ровно то, что увидит игрок.
         val state = FactoryUiState(
             isLoading = false,
             coins = 320L,
@@ -132,10 +133,7 @@ class FactoryScreenshotTest {
                 selectedCell = position,
             ),
             selectedCell = position,
-            dialog = FactoryDialog.EmptyCell(
-                position = position,
-                options = FactoryUiStateMapper.buildOptions(domain, position),
-            ),
+            dialog = FactoryUiStateMapper.emptyCellDialog(domain, position),
         )
 
         compose.setContent {

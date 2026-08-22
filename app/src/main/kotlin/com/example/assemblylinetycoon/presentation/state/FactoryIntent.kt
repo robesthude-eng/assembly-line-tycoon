@@ -1,5 +1,6 @@
 package com.example.assemblylinetycoon.presentation.state
 
+import com.example.assemblylinetycoon.domain.model.Direction
 import com.example.assemblylinetycoon.domain.model.GridPosition
 import com.example.assemblylinetycoon.domain.model.MachineType
 
@@ -32,6 +33,21 @@ sealed interface FactoryIntent : UiIntent {
 
     /** Улучшить машину. */
     data class UpgradeMachine(val machineId: Int) : FactoryIntent
+
+    /** Проложить отрезок конвейера в выбранном направлении. */
+    data class PlaceBelt(
+        val position: GridPosition,
+        val direction: Direction,
+    ) : FactoryIntent
+
+    /** Развернуть уже проложенную ленту. */
+    data class RotateBelt(
+        val position: GridPosition,
+        val direction: Direction,
+    ) : FactoryIntent
+
+    /** Снести содержимое ячейки. */
+    data class Demolish(val position: GridPosition) : FactoryIntent
 
     /** Закрыть открытый диалог. */
     data object CloseDialog : FactoryIntent

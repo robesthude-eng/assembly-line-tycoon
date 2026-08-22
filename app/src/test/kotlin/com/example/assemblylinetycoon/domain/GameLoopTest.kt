@@ -105,7 +105,8 @@ class GameLoopTest {
             loop.start(GameState.EMPTY.copy(coins = 5_000L))
             loop.dispatch(GameCommand.ResetProgress)
 
-            assertEquals(GameState.EMPTY, loop.state.value)
+            // Сброс возвращает не пустоту, а новую игру со стартовым капиталом.
+            assertEquals(GameState.NEW_GAME, loop.state.value)
         }
     }
 
