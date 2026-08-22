@@ -82,7 +82,7 @@ class AppContainer(context: Context) {
 
     val observeGameStateUseCase by lazy { ObserveGameStateUseCase(gameRepository) }
     val loadGameStateUseCase by lazy { LoadGameStateUseCase(gameRepository) }
-    val saveGameStateUseCase by lazy { SaveGameStateUseCase(gameRepository) }
+    val saveGameStateUseCase by lazy { SaveGameStateUseCase(gameRepository, timeProvider) }
     val observeSettingsUseCase by lazy { ObserveSettingsUseCase(settingsRepository) }
     val calculateOfflineProgressUseCase by lazy { CalculateOfflineProgressUseCase() }
     val showRewardedAdUseCase by lazy { ShowRewardedAdUseCase(adsRepository) }

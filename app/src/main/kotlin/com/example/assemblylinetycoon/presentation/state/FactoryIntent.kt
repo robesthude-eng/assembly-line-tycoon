@@ -49,6 +49,9 @@ sealed interface FactoryIntent : UiIntent {
     /** Снести содержимое ячейки. */
     data class Demolish(val position: GridPosition) : FactoryIntent
 
+    /** Игрок забрал офлайн-доход и закрыл окно итогов. */
+    data object OfflineEarningsClaimed : FactoryIntent
+
     /** Закрыть открытый диалог. */
     data object CloseDialog : FactoryIntent
 

@@ -16,6 +16,8 @@ import com.example.assemblylinetycoon.domain.model.MachineType
 import com.example.assemblylinetycoon.domain.model.ProductionStats
 import com.example.assemblylinetycoon.domain.repository.GameRepository
 import com.example.assemblylinetycoon.domain.repository.SettingsRepository
+import com.example.assemblylinetycoon.core.constants.GameConstants
+import com.example.assemblylinetycoon.domain.usecase.CalculateOfflineProgressUseCase
 import com.example.assemblylinetycoon.domain.usecase.LoadGameStateUseCase
 import com.example.assemblylinetycoon.domain.usecase.ObserveSettingsUseCase
 import com.example.assemblylinetycoon.domain.usecase.SaveGameStateUseCase
@@ -32,6 +34,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -82,15 +86,18 @@ class FactoryViewModelTest {
 
         var startedWith: GameState? = null
         var stopCount: Int = 0
+        var running: Boolean = false
         val commands = mutableListOf<GameCommand>()
 
         override fun start(initialState: GameState) {
             startedWith = initialState
+            running = true
             _state.value = initialState
         }
 
         override fun stop() {
             stopCount++
+            running = false
         }
 
         override fun dispatch(command: GameCommand) {
@@ -98,6 +105,8 @@ class FactoryViewModelTest {
             // Фейк повторяет поведение настоящего движка для команд игрока:
             // без этого нельзя проверить, что экран показывает результат.
             _state.value = when (command) {
+                is GameCommand.ApplyOfflineEarnings ->
+                    _state.value.copy(coins = _state.value.coins + command.coins)
                 is GameCommand.PlaceMachine ->
                     FactoryBuilder.place(_state.value, command.position, command.type)
                 is GameCommand.UpgradeMachine ->
@@ -119,10 +128,12 @@ class FactoryViewModelTest {
 
     private class FakeGameRepository(private val saved: GameState) : GameRepository {
         var savedState: GameState? = null
+        var saveCount: Int = 0
         override fun observeGameState() = flowOf(saved)
         override suspend fun loadGameState(): GameState = saved
         override suspend fun saveGameState(state: GameState) {
             savedState = state
+            saveCount++
         }
 
         override suspend fun clear() = Unit
@@ -141,15 +152,21 @@ class FactoryViewModelTest {
     private lateinit var engine: FakeEngine
     private lateinit var repository: FakeGameRepository
 
-    private fun createViewModel(initial: GameState = GameState.EMPTY): FactoryViewModel {
+    private fun createViewModel(
+        initial: GameState = GameState.EMPTY,
+        stored: GameState = factoryState,
+        nowMillis: Long = 0L,
+    ): FactoryViewModel {
         engine = FakeEngine(initial)
-        repository = FakeGameRepository(factoryState)
+        repository = FakeGameRepository(stored)
+        val time = FixedTime(nowMillis)
         return FactoryViewModel(
             gameEngine = engine,
             loadGameState = LoadGameStateUseCase(repository),
-            saveGameState = SaveGameStateUseCase(repository),
+            saveGameState = SaveGameStateUseCase(repository, time),
+            calculateOfflineProgress = CalculateOfflineProgressUseCase(),
             observeSettings = ObserveSettingsUseCase(FakeSettingsRepository()),
-            timeProvider = FixedTime(0L),
+            timeProvider = time,
         )
     }
 
@@ -184,9 +201,16 @@ class FactoryViewModelTest {
         val viewModel = createViewModel()
 
         viewModel.onIntent(FactoryIntent.ScreenStarted)
-        advanceUntilIdle()
+        // Именно runCurrent, а не advanceUntilIdle: автосохранение — вечный
+        // цикл с delay, и «промотать до простоя» такую очередь невозможно.
+        runCurrent()
 
         assertEquals(factoryState, engine.startedWith)
+
+        // Экран обязан быть остановлен: иначе вечный цикл автосейва
+        // переживёт тест и подвесит прогон.
+        viewModel.onIntent(FactoryIntent.ScreenStopped)
+        advanceUntilIdle()
     }
 
     @Test // уход в фон останавливает тикер и сохраняет прогресс
@@ -436,6 +460,147 @@ class FactoryViewModelTest {
         val dialog = viewModel.state.value.dialog as FactoryDialog.EmptyCell
         assertEquals(FactoryBuilder.beltCost(engine.state.value), dialog.beltCost)
         assertTrue(dialog.canAffordBelt)
+    }
+
+    // ── Сохранение и офлайн ─────────────────────────────────────────────────
+
+    @Test // за время отсутствия начисляются деньги и показываются игроку
+    fun offlineEarningsAreGrantedOnStart() = runTest(dispatcher) {
+        val awayMillis = 60 * 60 * 1000L // час
+        val stored = factoryState.copy(
+            coins = 100L,
+            isInitialized = true,
+            lastSavedAtMillis = 1_000_000L,
+            baselineProductionRate = 2.0,
+        )
+        val viewModel = createViewModel(stored = stored, nowMillis = 1_000_000L + awayMillis)
+
+        viewModel.onIntent(FactoryIntent.ScreenStarted)
+        // Именно runCurrent, а не advanceUntilIdle: автосохранение — вечный
+        // цикл с delay, и «промотать до простоя» такую очередь невозможно.
+        runCurrent()
+
+        // Половина ставки за час: 3600 с × 2 монеты × 0.5 = 3600.
+        val expected = (awayMillis / 1000) * 2.0 * GameConstants.OFFLINE_EFFICIENCY
+        val dialog = viewModel.state.value.dialog as FactoryDialog.OfflineEarnings
+        assertEquals(expected.toLong(), dialog.coins)
+        assertEquals(100L + expected.toLong(), engine.state.value.coins)
+        assertTrue("Час меньше потолка", !dialog.cappedByLimit)
+
+        // Экран обязан быть остановлен: иначе вечный цикл автосейва
+        // переживёт тест и подвесит прогон.
+        viewModel.onIntent(FactoryIntent.ScreenStopped)
+        advanceUntilIdle()
+    }
+
+    @Test // долгое отсутствие обрезается потолком, и игрок об этом узнаёт
+    fun longAbsenceIsCappedAndExplained() = runTest(dispatcher) {
+        val stored = factoryState.copy(
+            isInitialized = true,
+            lastSavedAtMillis = 1_000_000L,
+            baselineProductionRate = 1.0,
+        )
+        val away = GameConstants.OFFLINE_CAP_DEFAULT_MS * 5
+        val viewModel = createViewModel(stored = stored, nowMillis = 1_000_000L + away)
+
+        viewModel.onIntent(FactoryIntent.ScreenStarted)
+        // Именно runCurrent, а не advanceUntilIdle: автосохранение — вечный
+        // цикл с delay, и «промотать до простоя» такую очередь невозможно.
+        runCurrent()
+
+        val dialog = viewModel.state.value.dialog as FactoryDialog.OfflineEarnings
+        assertTrue("Игрок должен видеть, что упёрся в потолок", dialog.cappedByLimit)
+        val capSeconds = GameConstants.OFFLINE_CAP_DEFAULT_MS / 1000
+        assertEquals((capSeconds * GameConstants.OFFLINE_EFFICIENCY).toLong(), dialog.coins)
+
+        // Экран обязан быть остановлен: иначе вечный цикл автосейва
+        // переживёт тест и подвесит прогон.
+        viewModel.onIntent(FactoryIntent.ScreenStopped)
+        advanceUntilIdle()
+    }
+
+    @Test // первый запуск не показывает окно про офлайн: начислять не за что
+    fun firstLaunchShowsNoOfflineDialog() = runTest(dispatcher) {
+        val viewModel = createViewModel(stored = GameState.NEW_GAME, nowMillis = 5_000_000L)
+
+        viewModel.onIntent(FactoryIntent.ScreenStarted)
+        // Именно runCurrent, а не advanceUntilIdle: автосохранение — вечный
+        // цикл с delay, и «промотать до простоя» такую очередь невозможно.
+        runCurrent()
+
+        assertEquals(FactoryDialog.None, viewModel.state.value.dialog)
+
+        // Экран обязан быть остановлен: иначе вечный цикл автосейва
+        // переживёт тест и подвесит прогон.
+        viewModel.onIntent(FactoryIntent.ScreenStopped)
+        advanceUntilIdle()
+    }
+
+    @Test // окно офлайн-дохода закрывается кнопкой «Забрать»
+    fun claimingOfflineEarningsClosesDialog() = runTest(dispatcher) {
+        val stored = factoryState.copy(
+            isInitialized = true,
+            lastSavedAtMillis = 1_000L,
+            baselineProductionRate = 5.0,
+        )
+        val viewModel = createViewModel(stored = stored, nowMillis = 1_000L + 600_000L)
+        viewModel.onIntent(FactoryIntent.ScreenStarted)
+        // Именно runCurrent, а не advanceUntilIdle: автосохранение — вечный
+        // цикл с delay, и «промотать до простоя» такую очередь невозможно.
+        runCurrent()
+        assertTrue(viewModel.state.value.dialog is FactoryDialog.OfflineEarnings)
+
+        viewModel.onIntent(FactoryIntent.OfflineEarningsClaimed)
+        runCurrent()
+
+        assertEquals(FactoryDialog.None, viewModel.state.value.dialog)
+
+        // Экран обязан быть остановлен: иначе вечный цикл автосейва
+        // переживёт тест и подвесит прогон.
+        viewModel.onIntent(FactoryIntent.ScreenStopped)
+        advanceUntilIdle()
+    }
+
+    @Test // прогресс сохраняется сам, без ухода с экрана
+    fun progressIsAutosavedWhileScreenIsOpen() = runTest(dispatcher) {
+        val viewModel = createViewModel(stored = GameState.NEW_GAME, nowMillis = 777L)
+        viewModel.onIntent(FactoryIntent.ScreenStarted)
+        // Именно runCurrent, а не advanceUntilIdle: автосохранение — вечный
+        // цикл с delay, и «промотать до простоя» такую очередь невозможно.
+        runCurrent()
+        assertEquals("До первого интервала сохранять нечего", 0, repository.saveCount)
+
+        advanceTimeBy(GameConstants.AUTOSAVE_INTERVAL_MS * 3 + 1)
+        runCurrent()
+
+        assertEquals(3, repository.saveCount)
+        // Отметку времени ставит use case: без неё офлайн-доход не посчитать.
+        assertEquals(777L, repository.savedState!!.lastSavedAtMillis)
+        assertTrue(repository.savedState!!.isInitialized)
+
+        // Экран обязан быть остановлен: иначе вечный цикл автосейва
+        // переживёт тест и подвесит прогон.
+        viewModel.onIntent(FactoryIntent.ScreenStopped)
+        advanceUntilIdle()
+    }
+
+    @Test // уход с экрана останавливает и движок, и автосейв
+    fun leavingScreenStopsEngineAndAutosave() = runTest(dispatcher) {
+        val viewModel = createViewModel(stored = GameState.NEW_GAME)
+        viewModel.onIntent(FactoryIntent.ScreenStarted)
+        // Именно runCurrent, а не advanceUntilIdle: автосохранение — вечный
+        // цикл с delay, и «промотать до простоя» такую очередь невозможно.
+        runCurrent()
+
+        viewModel.onIntent(FactoryIntent.ScreenStopped)
+        advanceUntilIdle()
+        val savesAtStop = repository.saveCount
+        advanceTimeBy(GameConstants.AUTOSAVE_INTERVAL_MS * 5)
+        runCurrent()
+
+        assertTrue("Уход с экрана обязан сохранить прогресс", savesAtStop >= 1)
+        assertEquals("После остановки автосейв не должен работать", savesAtStop, repository.saveCount)
+        assertTrue(!engine.running)
     }
 
     @Test // экран меняет состояние только командами, а не напрямую

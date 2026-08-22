@@ -1,5 +1,6 @@
 package com.example.assemblylinetycoon.presentation.ui.components
 
+import com.example.assemblylinetycoon.core.constants.GameConstants
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,8 @@ import com.example.assemblylinetycoon.presentation.state.BuildOptionUi
 import com.example.assemblylinetycoon.presentation.state.MachineUiInfo
 import com.example.assemblylinetycoon.presentation.ui.render.FactoryLabels
 import com.example.assemblylinetycoon.presentation.ui.theme.AssemblyLineTycoonTheme
+import com.example.assemblylinetycoon.presentation.ui.theme.ConveyorAmber
+import com.example.assemblylinetycoon.presentation.ui.theme.OnDarkSecondary
 
 /** Теги для UI-тестов диалогов. */
 const val MACHINE_DIALOG_TAG = "machine_dialog"
@@ -34,6 +37,8 @@ const val MACHINE_DIALOG_UPGRADE_TAG = "machine_dialog_upgrade"
 const val EMPTY_CELL_DIALOG_TAG = "empty_cell_dialog"
 const val BELT_DIALOG_TAG = "belt_dialog"
 const val DEMOLISH_BUTTON_TAG = "demolish_button"
+const val OFFLINE_DIALOG_TAG = "offline_dialog"
+const val OFFLINE_CLAIM_BUTTON_TAG = "offline_claim_button"
 
 /**
  * Карточка машины.
@@ -336,6 +341,71 @@ private fun BeltDialogPreview() {
             onRotate = {},
             onDemolish = {},
             onDismiss = {},
+        )
+    }
+}
+
+/**
+ * Итоги отсутствия игрока.
+ *
+ * Показывается один раз при запуске и только если что-то действительно
+ * начислено: пустое окно «вы заработали 0» раздражает и обесценивает
+ * механику. Отдельной кнопки «удвоить за рекламу» здесь пока нет — она
+ * появится вместе со слоем монетизации, чтобы не рисовать заглушку,
+ * которая ничего не делает.
+ */
+@Composable
+fun OfflineEarningsDialog(
+    coins: Long,
+    awayMillis: Long,
+    cappedByLimit: Boolean,
+    onClaim: () -> Unit,
+) {
+    AlertDialog(
+        modifier = Modifier.testTag(OFFLINE_DIALOG_TAG),
+        onDismissRequest = onClaim,
+        title = { Text("Пока вас не было") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Завод проработал " + NumberFormatter.formatDuration(awayMillis),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OnDarkSecondary,
+                )
+                Text(
+                    text = "+" + NumberFormatter.format(coins) + " монет",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = ConveyorAmber,
+                )
+                if (cappedByLimit) {
+                    Text(
+                        text = "Начисление ограничено " +
+                            NumberFormatter.formatDuration(GameConstants.OFFLINE_CAP_DEFAULT_MS) +
+                            ": дольше завод работает без присмотра только с управляющим.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = OnDarkSecondary,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                modifier = Modifier.testTag(OFFLINE_CLAIM_BUTTON_TAG),
+                onClick = onClaim,
+            ) { Text("Забрать") }
+        },
+    )
+}
+
+@Preview(name = "Офлайн-доход")
+@Composable
+private fun OfflineEarningsDialogPreview() {
+    AssemblyLineTycoonTheme {
+        OfflineEarningsDialog(
+            coins = 1_240L,
+            awayMillis = 3 * 60 * 60 * 1000L,
+            cappedByLimit = true,
+            onClaim = {},
         )
     }
 }

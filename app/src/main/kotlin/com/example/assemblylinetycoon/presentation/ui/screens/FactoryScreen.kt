@@ -38,6 +38,7 @@ import com.example.assemblylinetycoon.presentation.ui.components.EmptyCellDialog
 import com.example.assemblylinetycoon.presentation.ui.components.FactoryCanvas
 import com.example.assemblylinetycoon.presentation.ui.components.FactoryHud
 import com.example.assemblylinetycoon.presentation.ui.components.MachineDialog
+import com.example.assemblylinetycoon.presentation.ui.components.OfflineEarningsDialog
 import com.example.assemblylinetycoon.presentation.ui.theme.AssemblyLineTycoonTheme
 import com.example.assemblylinetycoon.presentation.viewmodel.FactoryViewModel
 
@@ -168,6 +169,13 @@ private fun FactoryDialogs(
                 onIntent(FactoryIntent.PlaceBelt(dialog.position, direction))
             },
             onDismiss = { onIntent(FactoryIntent.CloseDialog) },
+        )
+
+        is FactoryDialog.OfflineEarnings -> OfflineEarningsDialog(
+            coins = dialog.coins,
+            awayMillis = dialog.awayMillis,
+            cappedByLimit = dialog.cappedByLimit,
+            onClaim = { onIntent(FactoryIntent.OfflineEarningsClaimed) },
         )
 
         is FactoryDialog.BeltCell -> BeltDialog(

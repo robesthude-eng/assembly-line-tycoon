@@ -132,6 +132,19 @@ sealed interface FactoryDialog {
         val canAffordBelt: Boolean = false,
     ) : FactoryDialog
 
+    /**
+     * Итог отсутствия игрока: показывается один раз при запуске.
+     *
+     * @param coins начислено монет
+     * @param awayMillis сколько игрока не было (без учёта потолка)
+     * @param cappedByLimit упёрлось ли начисление в потолок
+     */
+    data class OfflineEarnings(
+        val coins: Long,
+        val awayMillis: Long,
+        val cappedByLimit: Boolean,
+    ) : FactoryDialog
+
     /** Проложенная лента: развернуть или снести. */
     data class BeltCell(
         val position: GridPosition,

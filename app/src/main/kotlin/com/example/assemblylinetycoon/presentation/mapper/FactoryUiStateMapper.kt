@@ -97,6 +97,10 @@ object FactoryUiStateMapper {
                 FactoryDialog.None      // в ячейке уже что-то построили
             }
 
+            // Итог отсутствия игрока не зависит от текущего состояния завода:
+            // пересобирать нечего, окно живёт до нажатия «Забрать».
+            is FactoryDialog.OfflineEarnings -> dialog
+
             is FactoryDialog.BeltCell -> {
                 val cell = domain.grid[dialog.position]
                 if (cell?.isBelt == true) {

@@ -21,6 +21,7 @@ class ViewModelFactory(
             gameEngine = container.gameEngine,
             loadGameState = container.loadGameStateUseCase,
             saveGameState = container.saveGameStateUseCase,
+            calculateOfflineProgress = container.calculateOfflineProgressUseCase,
             observeSettings = container.observeSettingsUseCase,
             timeProvider = container.timeProvider,
         ) as T

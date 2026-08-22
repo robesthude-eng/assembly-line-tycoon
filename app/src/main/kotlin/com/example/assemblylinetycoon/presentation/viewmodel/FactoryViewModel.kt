@@ -1,11 +1,13 @@
 package com.example.assemblylinetycoon.presentation.viewmodel
 
 import androidx.lifecycle.viewModelScope
+import com.example.assemblylinetycoon.core.constants.GameConstants
 import com.example.assemblylinetycoon.core.utils.TimeProvider
 import com.example.assemblylinetycoon.domain.engine.FactoryBuilder
 import com.example.assemblylinetycoon.domain.engine.GameCommand
 import com.example.assemblylinetycoon.domain.engine.GameEngine
 import com.example.assemblylinetycoon.domain.model.GridPosition
+import com.example.assemblylinetycoon.domain.usecase.CalculateOfflineProgressUseCase
 import com.example.assemblylinetycoon.domain.usecase.LoadGameStateUseCase
 import com.example.assemblylinetycoon.domain.usecase.ObserveSettingsUseCase
 import com.example.assemblylinetycoon.domain.usecase.SaveGameStateUseCase
@@ -14,6 +16,8 @@ import com.example.assemblylinetycoon.presentation.state.FactoryDialog
 import com.example.assemblylinetycoon.presentation.state.FactoryEffect
 import com.example.assemblylinetycoon.presentation.state.FactoryIntent
 import com.example.assemblylinetycoon.presentation.state.FactoryUiState
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -33,9 +37,13 @@ class FactoryViewModel(
     private val gameEngine: GameEngine,
     private val loadGameState: LoadGameStateUseCase,
     private val saveGameState: SaveGameStateUseCase,
+    private val calculateOfflineProgress: CalculateOfflineProgressUseCase,
     private val observeSettings: ObserveSettingsUseCase,
     private val timeProvider: TimeProvider,
 ) : MviViewModel<FactoryUiState, FactoryIntent, FactoryEffect>(FactoryUiState()) {
+
+    /** Цикл автосохранения; живёт, пока экран на переднем плане. */
+    private var autosaveJob: Job? = null
 
     init {
         observeEngine()
@@ -64,14 +72,18 @@ class FactoryViewModel(
 
     override fun handleIntent(intent: FactoryIntent) {
         when (intent) {
-            FactoryIntent.ScreenStarted -> viewModelScope.launch {
-                gameEngine.start(loadGameState())
-            }
+            FactoryIntent.ScreenStarted -> viewModelScope.launch { startGame() }
 
             FactoryIntent.ScreenStopped -> viewModelScope.launch {
+                autosaveJob?.cancel()
+                autosaveJob = null
                 gameEngine.stop()
+                // Сохранение при уходе с экрана обязательно: следующим шагом
+                // система может убить процесс без всякого предупреждения.
                 saveGameState(gameEngine.state.value)
             }
+
+            FactoryIntent.OfflineEarningsClaimed -> setState { copy(dialog = FactoryDialog.None) }
 
             is FactoryIntent.SelectCell -> selectCell(intent)
 
@@ -95,6 +107,64 @@ class FactoryViewModel(
 
             FactoryIntent.ErrorDismissed -> setState { copy(errorMessage = null) }
         }
+    }
+
+    /**
+     * Холодный старт: загрузка, начисление за отсутствие, запуск симуляции.
+     *
+     * Порядок важен. Офлайн-доход считается по загруженному снапшоту **до**
+     * старта движка: стоит движку сделать первый тик, и `lastSavedAtMillis`
+     * перестанет описывать момент, когда игрок ушёл.
+     */
+    private suspend fun startGame() {
+        val saved = loadGameState()
+        val now = timeProvider.nowMillis()
+
+        val progress = calculateOfflineProgress(
+            state = saved,
+            nowMillis = now,
+            capMillis = GameConstants.OFFLINE_CAP_DEFAULT_MS,
+        )
+
+        gameEngine.start(saved)
+        if (progress.isSignificant) {
+            // Начисление идёт командой, как любое изменение состояния:
+            // ViewModel не имеет права трогать баланс напрямую.
+            gameEngine.dispatch(GameCommand.ApplyOfflineEarnings(progress.earnedCoins))
+            setState {
+                copy(
+                    dialog = FactoryDialog.OfflineEarnings(
+                        coins = progress.earnedCoins,
+                        awayMillis = progress.elapsedMillis,
+                        cappedByLimit = progress.elapsedMillis > progress.cappedMillis,
+                    ),
+                )
+            }
+        }
+
+        startAutosave()
+    }
+
+    /**
+     * Автосохранение раз в [GameConstants.AUTOSAVE_INTERVAL_MS].
+     *
+     * Без него прогресс переживал бы только аккуратный выход с экрана, а
+     * снятие приложения из списка задач или убийство процесса системой
+     * стирали бы всё, что игрок построил с момента запуска.
+     */
+    private fun startAutosave() {
+        autosaveJob?.cancel()
+        autosaveJob = viewModelScope.launch {
+            while (true) {
+                delay(GameConstants.AUTOSAVE_INTERVAL_MS)
+                saveGameState(gameEngine.state.value)
+            }
+        }
+    }
+
+    override fun onCleared() {
+        autosaveJob?.cancel()
+        super.onCleared()
     }
 
     /**
