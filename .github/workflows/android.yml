@@ -1,0 +1,82 @@
+name: Android CI
+
+# Проверка каждого изменения: сборка, юнит-тесты и статический анализ.
+# Задача пайплайна — не пропустить в main то, что не собирается или ломает баланс.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+# Новый пуш в ту же ветку отменяет предыдущий прогон: очередь не копится.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Сборка и тесты
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Получить исходники
+        uses: actions/checkout@v4
+
+      - name: Установить JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Настроить Gradle с кэшем
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Проверить, что домен не зависит от Android
+        run: |
+          # Архитектурное правило из ARCHITECTURE.md: слой domain — чистый Kotlin.
+          # grep в обратной логике: находки означают нарушение.
+          if grep -rn "^import android\." app/src/main/kotlin/com/example/assemblylinetycoon/domain/; then
+            echo "::error::Слой domain импортирует Android SDK — это нарушает архитектуру"
+            exit 1
+          fi
+          echo "Слой domain чист"
+
+      - name: Юнит-тесты
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+      - name: Статический анализ
+        run: ./gradlew :app:lintDebug
+
+      - name: Собрать debug APK
+        run: ./gradlew :app:assembleDebug
+
+      - name: Отчёт о тестах
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: app/build/reports/tests/testDebugUnitTest/
+          retention-days: 14
+
+      - name: Отчёт статического анализа
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-debug.html
+          retention-days: 14
+
+      - name: APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14

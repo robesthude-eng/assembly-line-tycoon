@@ -93,6 +93,11 @@ android {
         abortOnError = true
         // Проверка «устаревшая версия Yandex Ads SDK» не должна ломать локальную сборку.
         disable += "MobileAdsSdkOutdatedVersion"
+        // Сработка приходит из Glide, который транзитивно тянет Yandex Ads:
+        // NotificationTarget умеет слать уведомления, поэтому lint требует
+        // POST_NOTIFICATIONS. Игра уведомлений не отправляет, а лишнее
+        // разрешение — это и вопрос на модерации RuStore, и отказы игроков.
+        disable += "NotificationPermission"
     }
 
     testOptions {
