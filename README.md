@@ -93,6 +93,9 @@ echo "sdk.dir=/путь/к/android-sdk" > local.properties
 Состояние проверки: `assembleDebug` собирает APK (~21 МБ),
 `testDebugUnitTest` — 41 тест, 0 падений.
 
+Релиз и версии — см. [RELEASE.md](RELEASE.md):
+`./gradlew printVersion`, `./gradlew bumpPatch`, `./gradlew :app:bundleRelease`.
+
 В Android Studio: `File → Open`, дождаться Gradle sync, запустить конфигурацию `app`.
 Compose Preview открывается в `presentation/ui/screens/FactoryScreen.kt`.
 
@@ -105,7 +108,7 @@ Compose Preview открывается в `presentation/ui/screens/FactoryScreen
 | 4. UI | Отрисовка сетки и предметов на Canvas, HUD, магазин, дерево технологий |
 | 5. Реклама | Подключение Yandex SDK в обёртки, экран согласия, кулдауны плейсментов |
 | 6. Покупки | RuStore Billing: «Без рекламы», «Автоматический управляющий», паки валюты |
-| 7. Релиз | Подпись, R8-профиль, AAB, чеклист модерации RuStore |
+| ~~7. Релиз~~ | ✅ Подпись, R8, AAB, автоверсионирование, CI-пайплайны |
 
 ## Экономика
 

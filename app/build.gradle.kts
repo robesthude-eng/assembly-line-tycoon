@@ -1,4 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.FileInputStream
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -6,6 +8,60 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
+
+// ---------------------------------------------------------------------------
+// Версионирование
+// ---------------------------------------------------------------------------
+// Версия хранится в version.properties, а не в этом файле: так её может менять
+// задача bumpPatch и читать CI, не разбирая Kotlin DSL регулярками.
+val versionFile = rootProject.file("version.properties")
+val versionProps = Properties().apply { FileInputStream(versionFile).use(::load) }
+
+fun versionProp(key: String): Int = versionProps.getProperty(key)?.trim()?.toIntOrNull()
+    ?: error("В version.properties нет числового значения $key")
+
+val appVersionMajor = versionProp("VERSION_MAJOR")
+val appVersionMinor = versionProp("VERSION_MINOR")
+val appVersionPatch = versionProp("VERSION_PATCH")
+
+// В CI номер сборки берётся из счётчика прогонов GitHub Actions: он монотонно
+// растёт и не зависит от того, что закоммичено. Локально — значение из файла.
+val appBuildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+    ?: versionProp("VERSION_BUILD")
+
+/**
+ * versionCode должен строго возрастать, иначе магазин и сам Android откажутся
+ * ставить обновление поверх установленного. Схема разрядов:
+ * мажор × 10 000 000 + минор × 100 000 + патч × 1 000 + номер сборки.
+ * Запас: 999 сборок на патч, 99 патчей на минор, 99 миноров на мажор.
+ */
+val appVersionCode = appVersionMajor * 10_000_000 +
+    appVersionMinor * 100_000 +
+    appVersionPatch * 1_000 +
+    appBuildNumber
+
+val appVersionName = "$appVersionMajor.$appVersionMinor.$appVersionPatch"
+
+// ---------------------------------------------------------------------------
+// Подпись
+// ---------------------------------------------------------------------------
+// Ключ в репозиторий не попадает. Локально путь и пароли берутся из
+// keystore.properties (он в .gitignore), в CI — из переменных окружения,
+// которые workflow наполняет из GitHub Secrets.
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) FileInputStream(keystorePropsFile).use(::load)
+}
+
+fun signingValue(propKey: String, envKey: String): String? =
+    keystoreProps.getProperty(propKey) ?: System.getenv(envKey)
+
+// Путь резолвится от корня проекта, а не от модуля app: иначе относительный
+// путь из keystore.properties молча не найдётся и APK выйдет неподписанным.
+val keystoreFile = signingValue("storeFile", "KEYSTORE_FILE")?.let { path ->
+    File(path).takeIf(File::isAbsolute) ?: rootProject.file(path)
+}
+val hasSigningConfig = keystoreFile?.exists() == true
 
 android {
     namespace = "com.example.assemblylinetycoon"
@@ -15,8 +71,8 @@ android {
         applicationId = "com.example.assemblylinetycoon"
         minSdk = 26          // Android 8.0: adaptive-иконки, RuStore Billing (24+), Yandex Ads (21+)
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -24,6 +80,21 @@ android {
 
         // Игре не нужны локали кроме русской и английской — экономим вес APK.
         resourceConfigurations += setOf("ru", "en")
+    }
+
+    signingConfigs {
+        if (hasSigningConfig) {
+            create("release") {
+                storeFile = keystoreFile
+                storePassword = signingValue("storePassword", "KEYSTORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "KEY_PASSWORD")
+                // v1 нужен для Android 8, v2/v3 — быстрая проверка на новых версиях.
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
     }
 
     buildTypes {
@@ -41,7 +112,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // signingConfig подключается в CI из GitHub Secrets, ключ в репозитории не хранится.
+            // Без ключа сборка не падает, а остаётся неподписанной: так локальный
+            // ./gradlew assembleRelease работает у любого разработчика.
+            signingConfig = if (hasSigningConfig) signingConfigs.getByName("release") else null
         }
     }
 
@@ -157,4 +230,56 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+}
+
+// ---------------------------------------------------------------------------
+// Задачи управления версией
+// ---------------------------------------------------------------------------
+// Правило проекта: version.properties меняется только этими задачами.
+// Ручная правка легко приводит к versionCode, который меньше уже
+// опубликованного, — и обновление перестаёт устанавливаться.
+
+/** Переписывает version.properties, сохраняя комментарии файла. */
+fun writeVersion(major: Int, minor: Int, patch: Int, build: Int) {
+    val text = versionFile.readText()
+        .replace(Regex("(?m)^VERSION_MAJOR=.*$"), "VERSION_MAJOR=$major")
+        .replace(Regex("(?m)^VERSION_MINOR=.*$"), "VERSION_MINOR=$minor")
+        .replace(Regex("(?m)^VERSION_PATCH=.*$"), "VERSION_PATCH=$patch")
+        .replace(Regex("(?m)^VERSION_BUILD=.*$"), "VERSION_BUILD=$build")
+    versionFile.writeText(text)
+    println("Версия: $major.$minor.$patch (сборка $build)")
+}
+
+tasks.register("bumpBuild") {
+    group = "versioning"
+    description = "Увеличить номер сборки: 0.1.0 (1) → 0.1.0 (2)"
+    doLast { writeVersion(appVersionMajor, appVersionMinor, appVersionPatch, appBuildNumber + 1) }
+}
+
+tasks.register("bumpPatch") {
+    group = "versioning"
+    description = "Патч-версия: 0.1.0 → 0.1.1, счётчик сборок сбрасывается"
+    doLast { writeVersion(appVersionMajor, appVersionMinor, appVersionPatch + 1, 1) }
+}
+
+tasks.register("bumpMinor") {
+    group = "versioning"
+    description = "Минорная версия: 0.1.3 → 0.2.0"
+    doLast { writeVersion(appVersionMajor, appVersionMinor + 1, 0, 1) }
+}
+
+tasks.register("bumpMajor") {
+    group = "versioning"
+    description = "Мажорная версия: 0.9.1 → 1.0.0"
+    doLast { writeVersion(appVersionMajor + 1, 0, 0, 1) }
+}
+
+tasks.register("printVersion") {
+    group = "versioning"
+    description = "Показать версию, которую получит текущая сборка"
+    doLast {
+        println("versionName = $appVersionName")
+        println("versionCode = $appVersionCode")
+        println("подпись релиза = " + if (hasSigningConfig) "настроена" else "нет ключа, APK будет неподписанным")
+    }
 }
