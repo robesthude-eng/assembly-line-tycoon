@@ -48,7 +48,23 @@ data class GameState(
 
     /** Момент окончания «Ускорения» за просмотр ролика, epoch millis. */
     val overdriveUntilMillis: Long = 0L,
+
+    /** Предметы, едущие по лентам прямо сейчас. */
+    val movingItems: List<MovingItem> = emptyList(),
+
+    /** Накопительная статистика производства. */
+    val stats: ProductionStats = ProductionStats.EMPTY,
+
+    /** Момент последнего шага симуляции, epoch millis. */
+    val lastTickAtMillis: Long = 0L,
 ) {
+
+    /** Предмет, едущий в ячейку [position]; ячейка считается занятой им. */
+    fun itemMovingTo(position: GridPosition): MovingItem? =
+        movingItems.firstOrNull { it.to == position }
+
+    /** Свободна ли ячейка для въезда предмета. */
+    fun isCellFree(position: GridPosition): Boolean = itemMovingTo(position) == null
 
     /** Сколько машин типа [type] уже построено — вход для расчёта цены следующей. */
     fun machineCount(type: MachineType): Int = machines.values.count { it.type == type }

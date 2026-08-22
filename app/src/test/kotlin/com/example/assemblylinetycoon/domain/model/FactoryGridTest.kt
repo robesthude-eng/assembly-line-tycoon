@@ -29,7 +29,7 @@ class FactoryGridTest {
     fun withCellDoesNotMutateSource() {
         val original = FactoryGrid.EMPTY
         val position = GridPosition(3, 4)
-        val updated = original.withCell(position, Cell(type = CellType.BELT))
+        val updated = original.withBelt(position, Direction.RIGHT)
 
         assertEquals(CellType.EMPTY, original[position]!!.type)
         assertEquals(CellType.BELT, updated[position]!!.type)
@@ -42,14 +42,14 @@ class FactoryGridTest {
         assertEquals(grid, updated)
     }
 
-    @Test // предмет на конце ячейки считается заблокированным
-    fun cellReportsBackpressure() {
-        val moving = Cell(type = CellType.BELT, item = ItemId.IRON_ORE, itemProgress = 0.4f)
-        val stuck = Cell(type = CellType.BELT, item = ItemId.IRON_ORE, itemProgress = 1f)
+    @Test // предмет на конце ячейки считается доехавшим
+    fun movingItemReportsArrival() {
+        val moving = MovingItem(ItemId.IRON_ORE.key, 1, GridPosition(0, 0), GridPosition(1, 0), progress = 0.4f)
+        val stuck = moving.copy(progress = 1f)
 
-        assertTrue(moving.isOccupied)
-        assertFalse(moving.isBlocked)
-        assertTrue(stuck.isBlocked)
+        assertFalse(moving.hasArrived)
+        assertTrue(stuck.hasArrived)
+        assertEquals(Direction.RIGHT, moving.direction)
     }
 
     @Test // соседняя ячейка вычисляется по направлению
@@ -74,7 +74,7 @@ class FactoryGridTest {
     @Test // рендерер получает только непустые ячейки
     fun occupiedCellsSkipEmptyOnes() {
         val grid = FactoryGrid.EMPTY
-            .withCell(GridPosition(0, 0), Cell(type = CellType.BELT))
+            .withBelt(GridPosition(0, 0), Direction.RIGHT)
             .withCell(GridPosition(1, 1), Cell(type = CellType.MACHINE, machineId = 7))
 
         val occupied = grid.occupiedCells()

@@ -2,6 +2,7 @@ package com.example.assemblylinetycoon.domain.engine
 
 import com.example.assemblylinetycoon.core.constants.GameConstants
 import com.example.assemblylinetycoon.core.dispatcher.DispatcherProvider
+import com.example.assemblylinetycoon.core.utils.MathUtility
 import com.example.assemblylinetycoon.core.utils.TimeProvider
 import com.example.assemblylinetycoon.domain.model.GameState
 import kotlinx.coroutines.CoroutineScope
@@ -18,14 +19,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 
 /**
- * Каркас игрового цикла на корутинах: тик 50 мс, состояние в [StateFlow].
+ * Игровой цикл: тикер на корутинах и единственная точка мутации состояния.
  *
- * Симуляция (конвейеры, машины, экономика) намеренно не реализована — она
- * появится в [reduce] на следующем этапе. Каркас нужен, чтобы зафиксировать
- * однонаправленный поток данных: команда → reduce → новое состояние → UI.
+ * Разделение обязанностей:
+ *  * [GameLoop] отвечает за время — когда случается такт и какой длины;
+ *  * [FactorySimulation] отвечает за содержание такта — что при этом
+ *    происходит с заводом.
+ *
+ * Такая пара позволяет проверять симуляцию без корутин вовсе, а тикер —
+ * на виртуальном времени `runTest`, не ожидая реальных миллисекунд.
  *
  * Цикл работает на [DispatcherProvider.default]: главный поток не занимается
- * симуляцией, Compose только читает готовое состояние.
+ * симуляцией, Compose только читает готовое состояние из [state].
  */
 class GameLoop(
     private val dispatchers: DispatcherProvider,
@@ -44,6 +49,8 @@ class GameLoop(
         _state.value = initialState
         tickerJob?.cancel()
         tickerJob = scope.launch {
+            // Монотонное время, а не настенное: перевод часов игроком не
+            // должен превращаться в гигантскую дельту симуляции.
             var previous = timeProvider.elapsedRealtimeMillis()
             while (isActive) {
                 delay(tickIntervalMillis)
@@ -63,11 +70,26 @@ class GameLoop(
         _state.update { current -> reduce(current, command) }
     }
 
-    /** Чистая функция перехода состояния — единственное место мутации данных игры. */
-    private fun reduce(current: GameState, command: GameCommand): GameState = when (command) {
-        is GameCommand.Tick -> current                 // TODO(этап 3): шаг симуляции
-        is GameCommand.ApplyOfflineEarnings -> current // TODO(этап 3): начисление офлайна
-        is GameCommand.ApplyAdReward -> current        // TODO(этап 4): эффекты наград
+    /**
+     * Чистая функция перехода состояния — единственное место мутации данных.
+     *
+     * Открыта для тестов: шаг симуляции можно проверить, не запуская тикер.
+     */
+    internal fun reduce(current: GameState, command: GameCommand): GameState = when (command) {
+        is GameCommand.Tick -> FactorySimulation.step(current, command.deltaMillis)
+            .copy(lastTickAtMillis = timeProvider.nowMillis())
+
+        is GameCommand.ApplyOfflineEarnings -> current.copy(
+            coins = MathUtility.addCoins(current.coins, command.coins),
+            stats = current.stats.copy(
+                coinsEarned = current.stats.coinsEarned + command.coins,
+            ),
+        )
+
+        // Награды за рекламу реализуются на этапе монетизации: движок уже
+        // принимает команду, чтобы поток данных не пришлось перестраивать.
+        is GameCommand.ApplyAdReward -> current
+
         GameCommand.ResetProgress -> GameState.EMPTY
     }
 
