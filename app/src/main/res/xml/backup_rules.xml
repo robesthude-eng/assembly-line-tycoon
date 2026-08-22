@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Автобэкап отключён: восстановление чужого сохранения на новом устройстве
+     ломает экономику и порождает жалобы на «пропавший прогресс». -->
+<full-backup-content>
+    <exclude domain="file" path="datastore/" />
+</full-backup-content>

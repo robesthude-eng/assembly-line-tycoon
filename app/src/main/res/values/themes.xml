@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Базовая тема нужна только до первого кадра Compose: цвета интерфейса
+         задаются в AssemblyLineTycoonTheme, а не здесь. -->
+    <style name="Theme.AssemblyLineTycoon" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/steel_dark</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

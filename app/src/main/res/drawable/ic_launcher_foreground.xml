@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Векторная иконка-заглушка: шестерня на ленте конвейера. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#F2A63B"
+        android:pathData="M54,34m-14,0a14,14 0,1 1,28 0a14,14 0,1 1,-28 0" />
+    <path
+        android:fillColor="#1B1F24"
+        android:pathData="M54,34m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+    <path
+        android:fillColor="#CF7A4B"
+        android:pathData="M28,62h52v10h-52z" />
+    <path
+        android:fillColor="#F2A63B"
+        android:pathData="M32,76h8v6h-8zM50,76h8v6h-8zM68,76h8v6h-8z" />
+</vector>
