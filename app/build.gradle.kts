@@ -176,7 +176,8 @@ android {
     testOptions {
         unitTests {
             isReturnDefaultValues = true
-            isIncludeAndroidResources = false
+            // Compose-тестам нужны настоящие ресурсы и тема приложения.
+            isIncludeAndroidResources = true
         }
     }
 }
@@ -227,6 +228,12 @@ dependencies {
     // ── Test ────────────────────────────────────────────────────────────────
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Compose-тесты гоняются в JVM через Robolectric: эмулятор в песочнице и
+    // в CI недоступен, а проверять экран всё равно нужно на каждом коммите.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.ext.junit)
+    testImplementation(composeBom)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.example.assemblylinetycoon.presentation.ui.screens.MainScreen
 import com.example.assemblylinetycoon.presentation.ui.theme.AssemblyLineTycoonTheme
 
 /**
@@ -30,7 +31,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             AssemblyLineTycoonTheme {
-                AppNavHost(container = container)
+                MainScreen(container = container)
             }
         }
     }

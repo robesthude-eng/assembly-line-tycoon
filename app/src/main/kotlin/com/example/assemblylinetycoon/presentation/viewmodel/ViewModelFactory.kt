@@ -17,11 +17,12 @@ class ViewModelFactory(
 
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T = when {
-        modelClass.isAssignableFrom(GameViewModel::class.java) -> GameViewModel(
+        modelClass.isAssignableFrom(FactoryViewModel::class.java) -> FactoryViewModel(
             gameEngine = container.gameEngine,
             loadGameState = container.loadGameStateUseCase,
             saveGameState = container.saveGameStateUseCase,
             observeSettings = container.observeSettingsUseCase,
+            timeProvider = container.timeProvider,
         ) as T
 
         else -> error("Неизвестный ViewModel: ${modelClass.name}")

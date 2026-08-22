@@ -7,7 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.assemblylinetycoon.presentation.ui.screens.FactoryRoute
-import com.example.assemblylinetycoon.presentation.viewmodel.GameViewModel
+import com.example.assemblylinetycoon.presentation.viewmodel.FactoryViewModel
 import com.example.assemblylinetycoon.presentation.viewmodel.ViewModelFactory
 
 /** Маршруты приложения. Строки в одном месте, чтобы не разъезжались. */
@@ -23,7 +23,7 @@ fun AppNavHost(
 ) {
     NavHost(navController = navController, startDestination = Routes.FACTORY) {
         composable(Routes.FACTORY) {
-            val viewModel: GameViewModel = viewModel(factory = ViewModelFactory(container))
+            val viewModel: FactoryViewModel = viewModel(factory = ViewModelFactory(container))
             FactoryRoute(viewModel = viewModel)
         }
     }
