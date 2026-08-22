@@ -1,7 +1,6 @@
 package com.example.assemblylinetycoon.domain.model
 
 import com.example.assemblylinetycoon.core.constants.GameConstants
-import kotlinx.serialization.Serializable
 
 /**
  * Тип оборудования. Экономические параметры (цена и темп её роста) заданы
@@ -13,7 +12,6 @@ import kotlinx.serialization.Serializable
  *   именно он не даёт заставить поле одними ассемблерами.
  * @param inputSlots сколько разных предметов помещается во входной буфер.
  */
-@Serializable
 enum class MachineType(
     val baseCost: Long,
     val costGrowth: Double,
@@ -55,7 +53,6 @@ enum class MachineType(
  * противодавления: машина, которой некуда положить результат, не «съедает»
  * следующую порцию сырья, а стоит с готовым предметом на выходе.
  */
-@Serializable
 enum class MachineStatus {
     /** Ждёт сырья или свободного места. */
     IDLE,
@@ -76,7 +73,6 @@ enum class MachineStatus {
  * @param inputBuffer накопленное сырьё.
  * @param outputBuffer готовые предметы, ждущие выгрузки.
  */
-@Serializable
 data class Machine(
     val id: Int,
     val type: MachineType,

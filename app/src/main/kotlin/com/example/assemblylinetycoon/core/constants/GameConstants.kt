@@ -67,5 +67,5 @@ object GameConstants {
     const val MAX_TICK_DELTA_MS: Long = 1_000L
 
     /** Периодичность автосохранения (мс). */
-    const val AUTOSAVE_INTERVAL_MS: Long = 30_000L
+    const val AUTOSAVE_INTERVAL_MS: Long = 10_000L
 }

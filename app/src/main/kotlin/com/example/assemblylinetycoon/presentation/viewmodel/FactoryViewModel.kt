@@ -11,13 +11,13 @@ import com.example.assemblylinetycoon.domain.usecase.CalculateOfflineProgressUse
 import com.example.assemblylinetycoon.domain.usecase.LoadGameStateUseCase
 import com.example.assemblylinetycoon.domain.usecase.ObserveSettingsUseCase
 import com.example.assemblylinetycoon.domain.usecase.SaveGameStateUseCase
+import com.example.assemblylinetycoon.domain.usecase.StartAutoSaveUseCase
+import com.example.assemblylinetycoon.domain.usecase.StopAutoSaveUseCase
 import com.example.assemblylinetycoon.presentation.mapper.FactoryUiStateMapper
 import com.example.assemblylinetycoon.presentation.state.FactoryDialog
 import com.example.assemblylinetycoon.presentation.state.FactoryEffect
 import com.example.assemblylinetycoon.presentation.state.FactoryIntent
 import com.example.assemblylinetycoon.presentation.state.FactoryUiState
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -37,13 +37,12 @@ class FactoryViewModel(
     private val gameEngine: GameEngine,
     private val loadGameState: LoadGameStateUseCase,
     private val saveGameState: SaveGameStateUseCase,
+    private val startAutoSave: StartAutoSaveUseCase,
+    private val stopAutoSave: StopAutoSaveUseCase,
     private val calculateOfflineProgress: CalculateOfflineProgressUseCase,
     private val observeSettings: ObserveSettingsUseCase,
     private val timeProvider: TimeProvider,
 ) : MviViewModel<FactoryUiState, FactoryIntent, FactoryEffect>(FactoryUiState()) {
-
-    /** Цикл автосохранения; живёт, пока экран на переднем плане. */
-    private var autosaveJob: Job? = null
 
     init {
         observeEngine()
@@ -75,8 +74,7 @@ class FactoryViewModel(
             FactoryIntent.ScreenStarted -> viewModelScope.launch { startGame() }
 
             FactoryIntent.ScreenStopped -> viewModelScope.launch {
-                autosaveJob?.cancel()
-                autosaveJob = null
+                stopAutoSave()
                 gameEngine.stop()
                 // Сохранение при уходе с экрана обязательно: следующим шагом
                 // система может убить процесс без всякого предупреждения.
@@ -142,28 +140,13 @@ class FactoryViewModel(
             }
         }
 
-        startAutosave()
-    }
-
-    /**
-     * Автосохранение раз в [GameConstants.AUTOSAVE_INTERVAL_MS].
-     *
-     * Без него прогресс переживал бы только аккуратный выход с экрана, а
-     * снятие приложения из списка задач или убийство процесса системой
-     * стирали бы всё, что игрок построил с момента запуска.
-     */
-    private fun startAutosave() {
-        autosaveJob?.cancel()
-        autosaveJob = viewModelScope.launch {
-            while (true) {
-                delay(GameConstants.AUTOSAVE_INTERVAL_MS)
-                saveGameState(gameEngine.state.value)
-            }
-        }
+        // Периодическую запись ведёт менеджер сохранений в скоупе приложения:
+        // автосейв обязан пережить и поворот экрана, и уход ViewModel.
+        startAutoSave { gameEngine.state.value }
     }
 
     override fun onCleared() {
-        autosaveJob?.cancel()
+        stopAutoSave()
         super.onCleared()
     }
 

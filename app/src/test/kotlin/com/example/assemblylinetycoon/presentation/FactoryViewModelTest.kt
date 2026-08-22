@@ -20,12 +20,19 @@ import com.example.assemblylinetycoon.core.constants.GameConstants
 import com.example.assemblylinetycoon.domain.usecase.CalculateOfflineProgressUseCase
 import com.example.assemblylinetycoon.domain.usecase.LoadGameStateUseCase
 import com.example.assemblylinetycoon.domain.usecase.ObserveSettingsUseCase
+import com.example.assemblylinetycoon.domain.save.AutoSave
 import com.example.assemblylinetycoon.domain.usecase.SaveGameStateUseCase
+import com.example.assemblylinetycoon.domain.usecase.StartAutoSaveUseCase
+import com.example.assemblylinetycoon.domain.usecase.StopAutoSaveUseCase
 import com.example.assemblylinetycoon.presentation.state.FactoryDialog
 import com.example.assemblylinetycoon.presentation.state.FactoryEffect
 import com.example.assemblylinetycoon.presentation.state.FactoryIntent
 import com.example.assemblylinetycoon.presentation.viewmodel.FactoryViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -136,7 +143,47 @@ class FactoryViewModelTest {
             saveCount++
         }
 
-        override suspend fun clear() = Unit
+        override suspend fun clearSaveData() = Unit
+    }
+
+    /**
+     * Автосейв-заглушка на виртуальном времени теста.
+     *
+     * Настоящий `SaveManager` живёт в скоупе приложения; экрану важно лишь то,
+     * что он просит начать и прекратить запись в нужные моменты.
+     */
+    private class FakeAutoSave(
+        private val repository: FakeGameRepository,
+        private val scope: CoroutineScope,
+        private val time: TimeProvider,
+        private val intervalMillis: Long = GameConstants.AUTOSAVE_INTERVAL_MS,
+    ) : AutoSave {
+        private var job: Job? = null
+        var startCount: Int = 0
+
+        override val isRunning: Boolean get() = job?.isActive == true
+
+        override fun start(snapshot: () -> GameState) {
+            startCount++
+            job?.cancel()
+            job = scope.launch {
+                while (true) {
+                    delay(intervalMillis)
+                    saveNow(snapshot())
+                }
+            }
+        }
+
+        override fun stop() {
+            job?.cancel()
+            job = null
+        }
+
+        override suspend fun saveNow(state: GameState) {
+            repository.saveGameState(
+                state.copy(lastSavedAtMillis = time.nowMillis(), isInitialized = true),
+            )
+        }
     }
 
     private class FakeSettingsRepository : SettingsRepository {
@@ -151,19 +198,24 @@ class FactoryViewModelTest {
 
     private lateinit var engine: FakeEngine
     private lateinit var repository: FakeGameRepository
+    private lateinit var autoSave: FakeAutoSave
 
     private fun createViewModel(
         initial: GameState = GameState.EMPTY,
         stored: GameState = factoryState,
         nowMillis: Long = 0L,
+        scope: CoroutineScope = CoroutineScope(dispatcher),
     ): FactoryViewModel {
         engine = FakeEngine(initial)
         repository = FakeGameRepository(stored)
         val time = FixedTime(nowMillis)
+        autoSave = FakeAutoSave(repository, scope, time)
         return FactoryViewModel(
             gameEngine = engine,
             loadGameState = LoadGameStateUseCase(repository),
-            saveGameState = SaveGameStateUseCase(repository, time),
+            saveGameState = SaveGameStateUseCase(autoSave),
+            startAutoSave = StartAutoSaveUseCase(autoSave),
+            stopAutoSave = StopAutoSaveUseCase(autoSave),
             calculateOfflineProgress = CalculateOfflineProgressUseCase(),
             observeSettings = ObserveSettingsUseCase(FakeSettingsRepository()),
             timeProvider = time,
@@ -599,6 +651,7 @@ class FactoryViewModelTest {
         runCurrent()
 
         assertTrue("Уход с экрана обязан сохранить прогресс", savesAtStop >= 1)
+        assertTrue("Менеджер сохранений должен быть остановлен", !autoSave.isRunning)
         assertEquals("После остановки автосейв не должен работать", savesAtStop, repository.saveCount)
         assertTrue(!engine.running)
     }

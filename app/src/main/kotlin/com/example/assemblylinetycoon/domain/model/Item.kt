@@ -1,12 +1,10 @@
 package com.example.assemblylinetycoon.domain.model
 
-import kotlinx.serialization.Serializable
 
 /**
  * Категория предмета. Определяет место в производственной цепочке и то,
  * как предмет будет показан игроку.
  */
-@Serializable
 enum class ItemCategory {
     /** Сырьё: добывается карьером, не требует входов. */
     RAW,
@@ -31,7 +29,6 @@ enum class ItemCategory {
  *
  * Новые предметы добавляются только в конец, ключи менять нельзя.
  */
-@Serializable
 enum class ItemId(val key: String) {
     // Сырьё
     IRON_ORE("iron_ore"),
@@ -69,14 +66,12 @@ enum class ItemId(val key: String) {
  * поэтому цвет хранится как строка `#RRGGBB`, а форма — как перечисление:
  * рендерер сам решит, во что это превратить.
  */
-@Serializable
 data class ItemVisual(
     val colorHex: String,
     val shape: ItemShape = ItemShape.SQUARE,
 )
 
 /** Силуэт предмета на ленте — минимум, нужный, чтобы различать их взглядом. */
-@Serializable
 enum class ItemShape { SQUARE, CIRCLE, TRIANGLE, HEXAGON }
 
 /**
@@ -94,7 +89,6 @@ enum class ItemShape { SQUARE, CIRCLE, TRIANGLE, HEXAGON }
  * @param maxStack сколько единиц помещается в один буфер машины.
  * @param visual подсказки для рендерера, домен ими не пользуется.
  */
-@Serializable
 data class Item(
     val id: String,
     val displayName: String,

@@ -1,20 +1,19 @@
 package com.example.assemblylinetycoon.domain.model
 
 import com.example.assemblylinetycoon.core.constants.GameConstants
-import kotlinx.serialization.Serializable
 
 /**
  * Единственный источник правды для симуляции.
  *
  * Правила слоя:
- *  * никакой зависимости от Android SDK — только Kotlin и kotlinx.serialization;
+ *  * никакой зависимости от Android SDK и даже от библиотеки сериализации:
+ *    формат файла описан отдельными моделями в слое data;
  *  * класс неизменяемый: движок возвращает новое состояние, а не мутирует текущее;
  *  * валюта хранится в [Long] (см. GDD: без чисел с плавающей точкой в деньгах).
  *
  * Сетка, машины и счётчик идентификаторов описаны здесь целиком; сам шаг
  * симуляции (движение предметов, такты машин) появится в `GameLoop.reduce`.
  */
-@Serializable
 data class GameState(
     /** Версия схемы сохранения для миграций. */
     val schemaVersion: Int = GameConstants.SAVE_SCHEMA_VERSION,

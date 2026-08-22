@@ -1,6 +1,5 @@
 package com.example.assemblylinetycoon.domain.model
 
-import kotlinx.serialization.Serializable
 
 /**
  * Предмет, едущий по конвейеру.
@@ -16,7 +15,6 @@ import kotlinx.serialization.Serializable
  * @param progress доля пути от 0 до 1. Значение 1 означает, что предмет
  *   доехал и ждёт: следующая клетка занята. Это и есть противодавление.
  */
-@Serializable
 data class MovingItem(
     val itemId: String,
     val amount: Int = 1,

@@ -1,12 +1,10 @@
 package com.example.assemblylinetycoon.domain.model
 
-import kotlinx.serialization.Serializable
 
 /**
  * Пользовательские настройки и монетизационные флаги.
  * Хранятся отдельно от [GameState]: их не нужно пересчитывать каждый тик.
  */
-@Serializable
 data class GameSettings(
     val soundEnabled: Boolean = true,
     val hapticsEnabled: Boolean = true,

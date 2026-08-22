@@ -1,31 +1,17 @@
 package com.example.assemblylinetycoon.domain.usecase
 
-import com.example.assemblylinetycoon.core.utils.TimeProvider
 import com.example.assemblylinetycoon.domain.model.GameState
-import com.example.assemblylinetycoon.domain.repository.GameRepository
+import com.example.assemblylinetycoon.domain.save.AutoSave
 
 /**
- * Сохранение снапшота (автосейв, уход в фон, важные события).
+ * Немедленное сохранение снапшота: уход с экрана, сворачивание, важное событие.
  *
- * Отметку времени ставит именно этот use case, а не вызывающий код. Причина
- * простая: `lastSavedAtMillis` — единственная точка отсчёта офлайн-дохода,
- * и если её проставление оставить на совесть каждого места вызова, рано или
- * поздно появится путь сохранения без отметки. Тогда игрок либо не получит
- * ничего за отсутствие, либо получит начисление за всё время с прошлого раза.
+ * Идёт через [AutoSave], а не напрямую в репозиторий, по двум причинам:
+ * отметку времени и защиту от одновременных записей должен ставить кто-то
+ * один, и этот кто-то — менеджер сохранений.
  */
 class SaveGameStateUseCase(
-    private val gameRepository: GameRepository,
-    private val timeProvider: TimeProvider,
+    private val autoSave: AutoSave,
 ) : SuspendUseCase<GameState, Unit> {
-
-    override suspend fun invoke(params: GameState) {
-        gameRepository.saveGameState(
-            params.copy(
-                lastSavedAtMillis = timeProvider.nowMillis(),
-                // Сохранение состоялось — значит игра точно начата, и офлайн
-                // при следующем запуске уже можно считать.
-                isInitialized = true,
-            ),
-        )
-    }
+    override suspend fun invoke(params: GameState) = autoSave.saveNow(params)
 }

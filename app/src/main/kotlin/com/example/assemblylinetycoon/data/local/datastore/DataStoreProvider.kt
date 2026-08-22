@@ -8,6 +8,8 @@ import androidx.datastore.dataStoreFile
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import com.example.assemblylinetycoon.data.local.datastore.model.SavedGameState
+import com.example.assemblylinetycoon.data.mapper.GameStateMapper
 import com.example.assemblylinetycoon.domain.model.GameState
 import kotlinx.coroutines.CoroutineScope
 
@@ -29,9 +31,12 @@ object DataStoreProvider {
     fun createGameStateStore(
         context: Context,
         scope: CoroutineScope,
-    ): DataStore<GameState> = DataStoreFactory.create(
+    ): DataStore<SavedGameState> = DataStoreFactory.create(
         serializer = GameStateSerializer(),
-        corruptionHandler = ReplaceFileCorruptionHandler { GameState.NEW_GAME },
+        // Файл испорчен — начинаем новую игру вместо падения на старте.
+        corruptionHandler = ReplaceFileCorruptionHandler {
+            GameStateMapper.toData(GameState.NEW_GAME)
+        },
         scope = scope,
         produceFile = { context.dataStoreFile(GAME_STATE_FILE) },
     )

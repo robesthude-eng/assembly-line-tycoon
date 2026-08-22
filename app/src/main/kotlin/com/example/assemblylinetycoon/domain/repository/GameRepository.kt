@@ -18,5 +18,5 @@ interface GameRepository {
     suspend fun saveGameState(state: GameState)
 
     /** Сброс прогресса к состоянию новой игры. */
-    suspend fun clear()
+    suspend fun clearSaveData()
 }

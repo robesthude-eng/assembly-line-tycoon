@@ -1,7 +1,6 @@
 package com.example.assemblylinetycoon.domain.model
 
 import com.example.assemblylinetycoon.domain.catalog.ItemCatalog
-import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -13,7 +12,6 @@ import org.junit.Test
 /** Модель предмета: создание, равенство и готовность к сериализации. */
 class ItemTest {
 
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     @Test // предмет создаётся со всеми полями и отвечает на запросы о себе
     fun itemIsCreatedWithAllFields() {
@@ -82,24 +80,10 @@ class ItemTest {
         }
     }
 
-    @Test // предмет переживает запись в JSON и чтение обратно
-    fun itemSurvivesJsonRoundTrip() {
-        val original = ItemCatalog[ItemId.AI_ROBOT_UNIT]
-        val restored = json.decodeFromString(Item.serializer(), json.encodeToString(Item.serializer(), original))
-        assertEquals(original, restored)
-    }
-
-    @Test // неизвестные поля из будущих версий не ломают чтение
-    fun unknownFieldsAreIgnored() {
-        val payload = """
-            {"id":"gear","displayName":"Шестерня","category":"COMPONENT","tier":2,
-             "basePrice":30,"maxStack":10,"durability":42}
-        """.trimIndent()
-
-        val item = json.decodeFromString(Item.serializer(), payload)
-        assertEquals("gear", item.id)
-        assertEquals(30L, item.basePrice)
-    }
+    // Тесты JSON-сериализации предмета удалены вместе с зависимостью домена
+    // от kotlinx.serialization: формат сохранения описан моделями `Saved*`
+    // в слое data и проверяется в GameStateMapperTest и GameStateSerializerTest.
+    // В файл попадает только идентификатор предмета, а не сам каталог.
 
     @Test // ключ предмета стабилен и разбирается обратно
     fun itemKeysAreStableAndResolvable() {

@@ -1,7 +1,6 @@
 package com.example.assemblylinetycoon.domain.model
 
 import com.example.assemblylinetycoon.core.constants.GameConstants
-import kotlinx.serialization.Serializable
 
 /**
  * Координата ячейки завода. Начало координат — левый верхний угол,
@@ -10,7 +9,6 @@ import kotlinx.serialization.Serializable
  * Это доменный тип, а не `Offset` из Compose: слой домена не знает об Android,
  * а перевод в пиксели — задача рендерера.
  */
-@Serializable
 data class GridPosition(val x: Int, val y: Int) {
 
     /** Соседняя ячейка в направлении [direction]. Границы не проверяются. */

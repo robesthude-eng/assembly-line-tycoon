@@ -1,6 +1,5 @@
 package com.example.assemblylinetycoon.domain.model
 
-import kotlinx.serialization.Serializable
 
 /**
  * Направление на ортогональной сетке. Задаёт, куда конвейер толкает предмет и
@@ -9,7 +8,6 @@ import kotlinx.serialization.Serializable
  * Хранится как перечисление, а не как угол: поворот на 90° — единственная
  * доступная игроку операция, промежуточных состояний быть не должно.
  */
-@Serializable
 enum class Direction(val dx: Int, val dy: Int) {
     UP(0, -1),
     RIGHT(1, 0),

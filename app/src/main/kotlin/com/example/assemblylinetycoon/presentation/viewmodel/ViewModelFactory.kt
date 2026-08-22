@@ -21,6 +21,8 @@ class ViewModelFactory(
             gameEngine = container.gameEngine,
             loadGameState = container.loadGameStateUseCase,
             saveGameState = container.saveGameStateUseCase,
+            startAutoSave = container.startAutoSaveUseCase,
+            stopAutoSave = container.stopAutoSaveUseCase,
             calculateOfflineProgress = container.calculateOfflineProgressUseCase,
             observeSettings = container.observeSettingsUseCase,
             timeProvider = container.timeProvider,

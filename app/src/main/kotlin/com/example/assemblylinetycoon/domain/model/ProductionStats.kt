@@ -1,6 +1,5 @@
 package com.example.assemblylinetycoon.domain.model
 
-import kotlinx.serialization.Serializable
 
 /**
  * Накопительная статистика производства.
@@ -12,7 +11,6 @@ import kotlinx.serialization.Serializable
  * Счётчики только растут и никогда не обнуляются в ходе сессии, поэтому
  * подходят для достижений и защищены от переполнения ёмкостью [Long].
  */
-@Serializable
 data class ProductionStats(
     /** Сколько предметов машины выпустили за всё время. */
     val itemsProduced: Long = 0L,

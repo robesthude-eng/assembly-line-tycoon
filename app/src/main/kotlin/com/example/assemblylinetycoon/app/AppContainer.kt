@@ -7,6 +7,7 @@ import com.example.assemblylinetycoon.core.utils.SystemTimeProvider
 import com.example.assemblylinetycoon.core.utils.TimeProvider
 import com.example.assemblylinetycoon.data.local.datastore.DataStoreProvider
 import com.example.assemblylinetycoon.data.repository.GameRepositoryImpl
+import com.example.assemblylinetycoon.data.save.SaveManager
 import com.example.assemblylinetycoon.data.repository.SettingsRepositoryImpl
 import com.example.assemblylinetycoon.domain.engine.GameEngine
 import com.example.assemblylinetycoon.domain.engine.GameLoop
@@ -18,7 +19,11 @@ import com.example.assemblylinetycoon.domain.usecase.CalculateOfflineProgressUse
 import com.example.assemblylinetycoon.domain.usecase.LoadGameStateUseCase
 import com.example.assemblylinetycoon.domain.usecase.ObserveGameStateUseCase
 import com.example.assemblylinetycoon.domain.usecase.ObserveSettingsUseCase
+import com.example.assemblylinetycoon.domain.save.AutoSave
+import com.example.assemblylinetycoon.domain.usecase.ClearSaveDataUseCase
 import com.example.assemblylinetycoon.domain.usecase.SaveGameStateUseCase
+import com.example.assemblylinetycoon.domain.usecase.StartAutoSaveUseCase
+import com.example.assemblylinetycoon.domain.usecase.StopAutoSaveUseCase
 import com.example.assemblylinetycoon.domain.usecase.ShowRewardedAdUseCase
 import com.example.assemblylinetycoon.monetization.ads.AdsInitializer
 import com.example.assemblylinetycoon.monetization.ads.AdsRepositoryImpl
@@ -59,6 +64,19 @@ class AppContainer(context: Context) {
     val gameRepository: GameRepository by lazy {
         GameRepositoryImpl(gameStateStore, dispatchers)
     }
+    /**
+     * Менеджер сохранений живёт в скоупе приложения, а не экрана: автосейв
+     * обязан переживать поворот устройства и смену экрана.
+     */
+    val autoSave: AutoSave by lazy {
+        SaveManager(
+            repository = gameRepository,
+            dispatchers = dispatchers,
+            timeProvider = timeProvider,
+            scope = appScope,
+        )
+    }
+
     val settingsRepository: SettingsRepository by lazy {
         SettingsRepositoryImpl(preferencesStore, dispatchers)
     }
@@ -82,7 +100,10 @@ class AppContainer(context: Context) {
 
     val observeGameStateUseCase by lazy { ObserveGameStateUseCase(gameRepository) }
     val loadGameStateUseCase by lazy { LoadGameStateUseCase(gameRepository) }
-    val saveGameStateUseCase by lazy { SaveGameStateUseCase(gameRepository, timeProvider) }
+    val saveGameStateUseCase by lazy { SaveGameStateUseCase(autoSave) }
+    val startAutoSaveUseCase by lazy { StartAutoSaveUseCase(autoSave) }
+    val stopAutoSaveUseCase by lazy { StopAutoSaveUseCase(autoSave) }
+    val clearSaveDataUseCase by lazy { ClearSaveDataUseCase(gameRepository) }
     val observeSettingsUseCase by lazy { ObserveSettingsUseCase(settingsRepository) }
     val calculateOfflineProgressUseCase by lazy { CalculateOfflineProgressUseCase() }
     val showRewardedAdUseCase by lazy { ShowRewardedAdUseCase(adsRepository) }

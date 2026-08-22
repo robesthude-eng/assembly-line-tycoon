@@ -1,7 +1,6 @@
 package com.example.assemblylinetycoon.domain.model
 
 import com.example.assemblylinetycoon.core.constants.GameConstants
-import kotlinx.serialization.Serializable
 
 /**
  * Что занимает ячейку поля.
@@ -11,7 +10,6 @@ import kotlinx.serialization.Serializable
  * сбросить предмет» и «где кончается цепочка», и делать это по типу ячейки
  * дешевле, чем каждый раз искать машину по идентификатору.
  */
-@Serializable
 enum class CellType {
     /** Свободное место, доступное для постройки. */
     EMPTY,
@@ -54,7 +52,6 @@ enum class CellType {
  * @param direction для ленты — куда она толкает предмет.
  * @param machineId ссылка на машину, если в ячейке стоит оборудование.
  */
-@Serializable
 data class Cell(
     val type: CellType = CellType.EMPTY,
     val direction: Direction = Direction.RIGHT,
@@ -82,7 +79,6 @@ data class Cell(
  * Список вместо карты выбран сознательно — обход в тике идёт по всем ячейкам,
  * а плоский массив даёт предсказуемую скорость и компактный JSON сохранения.
  */
-@Serializable
 data class FactoryGrid(
     val width: Int = GameConstants.GRID_WIDTH,
     val height: Int = GameConstants.GRID_HEIGHT,

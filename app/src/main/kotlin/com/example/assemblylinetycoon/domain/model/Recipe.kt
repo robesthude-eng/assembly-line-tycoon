@@ -1,6 +1,5 @@
 package com.example.assemblylinetycoon.domain.model
 
-import kotlinx.serialization.Serializable
 
 /**
  * Рецепт: что машина потребляет, что выдаёт и сколько это занимает времени
@@ -21,7 +20,6 @@ import kotlinx.serialization.Serializable
  * @param baseDurationMillis длительность такта на нулевом уровне.
  * @param machineType машина, на которой рецепт доступен.
  */
-@Serializable
 data class Recipe(
     val outputItemId: String,
     val outputAmount: Int = 1,

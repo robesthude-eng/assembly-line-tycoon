@@ -1,7 +1,6 @@
 package com.example.assemblylinetycoon.domain.model
 
 import com.example.assemblylinetycoon.domain.catalog.RecipeCatalog
-import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -10,7 +9,6 @@ import org.junit.Test
 /** Рецепт: сопоставление входов без учёта порядка, отказы и данные выхода. */
 class RecipeTest {
 
-    private val json = Json { encodeDefaults = true }
 
     private val ironIngot = Recipe(
         outputItemId = "iron_ingot",
@@ -134,16 +132,9 @@ class RecipeTest {
         }
     }
 
-    @Test // рецепт переживает JSON: карта входов восстанавливается целиком
-    fun recipeSurvivesJsonRoundTrip() {
-        val restored = json.decodeFromString(
-            Recipe.serializer(),
-            json.encodeToString(Recipe.serializer(), ironIngot),
-        )
-
-        assertEquals(ironIngot, restored)
-        assertEquals(2, restored.inputs["iron_ore"])
-    }
+    // Тест JSON-сериализации рецепта удалён: рецепты в сохранение не
+    // попадают — в файле лежит только ключ результата, а сам рецепт всегда
+    // берётся из каталога текущей сборки.
 
     @Test // каталог отдаёт рецепт по ключу предмета и по типу машины
     fun catalogLookupsWork() {

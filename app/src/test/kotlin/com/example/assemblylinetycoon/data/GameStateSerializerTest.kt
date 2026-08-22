@@ -3,6 +3,8 @@ package com.example.assemblylinetycoon.data
 import androidx.datastore.core.CorruptionException
 import com.example.assemblylinetycoon.core.constants.GameConstants
 import com.example.assemblylinetycoon.data.local.datastore.GameStateSerializer
+import com.example.assemblylinetycoon.data.local.datastore.model.SavedGameState
+import com.example.assemblylinetycoon.data.mapper.GameStateMapper
 import com.example.assemblylinetycoon.domain.model.Direction
 import com.example.assemblylinetycoon.domain.model.GameState
 import com.example.assemblylinetycoon.domain.model.GridPosition
@@ -28,11 +30,15 @@ class GameStateSerializerTest {
 
     private val serializer = GameStateSerializer()
 
+    /** Полный круг: домен → файл → домен, как это происходит на устройстве. */
     private suspend fun roundTrip(state: GameState): GameState {
         val out = ByteArrayOutputStream()
-        serializer.writeTo(state, out)
-        return serializer.readFrom(ByteArrayInputStream(out.toByteArray()))
+        serializer.writeTo(GameStateMapper.toData(state), out)
+        return GameStateMapper.toDomain(serializer.readFrom(ByteArrayInputStream(out.toByteArray())))
     }
+
+    private suspend fun read(json: String): SavedGameState =
+        serializer.readFrom(ByteArrayInputStream(json.encodeToByteArray()))
 
     @Test // построенный завод переживает запись и чтение без потерь
     fun factorySurvivesRoundTrip() = runTest {
@@ -64,9 +70,9 @@ class GameStateSerializerTest {
     @Test // сохранение прошлой версии читается: обновление игры не стирает прогресс
     fun savesWithoutNewFieldsAreStillReadable() = runTest {
         // Файл, записанный сборкой, где ещё не было половины полей.
-        val legacy = """{"schemaVersion":1,"coins":777,"lastSavedAtMillis":123}"""
+        val legacy = """{"v":1,"coins":777,"savedAt":123}"""
 
-        val restored = serializer.readFrom(ByteArrayInputStream(legacy.encodeToByteArray()))
+        val restored = GameStateMapper.toDomain(read(legacy))
 
         assertEquals(777L, restored.coins)
         assertEquals(123L, restored.lastSavedAtMillis)
@@ -76,9 +82,9 @@ class GameStateSerializerTest {
 
     @Test // неизвестные поля из будущей версии игнорируются, а не ломают чтение
     fun unknownFieldsAreIgnored() = runTest {
-        val future = """{"schemaVersion":1,"coins":10,"prestigeLevel":4,"guild":"нет"}"""
+        val future = """{"v":1,"coins":10,"prestigeLevel":4,"guild":"нет"}"""
 
-        assertEquals(10L, serializer.readFrom(ByteArrayInputStream(future.encodeToByteArray())).coins)
+        assertEquals(10L, read(future).coins)
     }
 
     @Test // битый файл даёт понятную ошибку, а не падение в случайном месте
@@ -95,7 +101,7 @@ class GameStateSerializerTest {
 
     @Test // после повреждения игрок начинает новую игру, а не смотрит на краш-луп
     fun defaultValueIsPlayableNewGame() {
-        assertEquals(GameState.NEW_GAME, serializer.defaultValue)
+        assertEquals(GameStateMapper.toData(GameState.NEW_GAME), serializer.defaultValue)
         assertEquals(GameConstants.STARTING_COINS, serializer.defaultValue.coins)
     }
 
