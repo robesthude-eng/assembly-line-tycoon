@@ -238,48 +238,38 @@ dependencies {
 // Правило проекта: version.properties меняется только этими задачами.
 // Ручная правка легко приводит к versionCode, который меньше уже
 // опубликованного, — и обновление перестаёт устанавливаться.
+//
+// Реализация задачи лежит в buildSrc/: так она совместима с конфигурационным
+// кэшем Gradle, который не умеет сериализовать ссылки на функции скрипта.
 
-/** Переписывает version.properties, сохраняя комментарии файла. */
-fun writeVersion(major: Int, minor: Int, patch: Int, build: Int) {
-    val text = versionFile.readText()
-        .replace(Regex("(?m)^VERSION_MAJOR=.*$"), "VERSION_MAJOR=$major")
-        .replace(Regex("(?m)^VERSION_MINOR=.*$"), "VERSION_MINOR=$minor")
-        .replace(Regex("(?m)^VERSION_PATCH=.*$"), "VERSION_PATCH=$patch")
-        .replace(Regex("(?m)^VERSION_BUILD=.*$"), "VERSION_BUILD=$build")
-    versionFile.writeText(text)
-    println("Версия: $major.$minor.$patch (сборка $build)")
-}
+// Локальная копия ссылки на файл: внутри блока настройки задачи имя
+// versionFile уже занято одноимённым свойством самой задачи.
+val versionPropertiesFile = versionFile
 
-tasks.register("bumpBuild") {
-    group = "versioning"
-    description = "Увеличить номер сборки: 0.1.0 (1) → 0.1.0 (2)"
-    doLast { writeVersion(appVersionMajor, appVersionMinor, appVersionPatch, appBuildNumber + 1) }
-}
+fun registerBump(name: String, bumpPart: VersionPart, help: String) =
+    tasks.register<BumpVersionTask>(name) {
+        group = "versioning"
+        description = help
+        versionFile.set(versionPropertiesFile)
+        part.set(bumpPart)
+    }
 
-tasks.register("bumpPatch") {
-    group = "versioning"
-    description = "Патч-версия: 0.1.0 → 0.1.1, счётчик сборок сбрасывается"
-    doLast { writeVersion(appVersionMajor, appVersionMinor, appVersionPatch + 1, 1) }
-}
-
-tasks.register("bumpMinor") {
-    group = "versioning"
-    description = "Минорная версия: 0.1.3 → 0.2.0"
-    doLast { writeVersion(appVersionMajor, appVersionMinor + 1, 0, 1) }
-}
-
-tasks.register("bumpMajor") {
-    group = "versioning"
-    description = "Мажорная версия: 0.9.1 → 1.0.0"
-    doLast { writeVersion(appVersionMajor + 1, 0, 0, 1) }
-}
+registerBump("bumpBuild", VersionPart.BUILD, "Увеличить номер сборки: 0.1.0 (1) → 0.1.0 (2)")
+registerBump("bumpPatch", VersionPart.PATCH, "Патч-версия: 0.1.0 → 0.1.1, счётчик сборок сбрасывается")
+registerBump("bumpMinor", VersionPart.MINOR, "Минорная версия: 0.1.3 → 0.2.0")
+registerBump("bumpMajor", VersionPart.MAJOR, "Мажорная версия: 0.9.1 → 1.0.0")
 
 tasks.register("printVersion") {
     group = "versioning"
     description = "Показать версию, которую получит текущая сборка"
+    // Значения захватываются в локальные переменные: лямбда не должна тянуть
+    // за собой объект скрипта, иначе ломается конфигурационный кэш.
+    val name = appVersionName
+    val code = appVersionCode
+    val signing = if (hasSigningConfig) "настроена" else "нет ключа, APK будет неподписанным"
     doLast {
-        println("versionName = $appVersionName")
-        println("versionCode = $appVersionCode")
-        println("подпись релиза = " + if (hasSigningConfig) "настроена" else "нет ключа, APK будет неподписанным")
+        println("versionName = $name")
+        println("versionCode = $code")
+        println("подпись релиза = $signing")
     }
 }
