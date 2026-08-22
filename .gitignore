@@ -13,3 +13,6 @@ local.properties
 keystore.properties
 app/build/
 .kotlin/
+
+# Собранные APK: лежат в воркспейсе, в репозиторий не попадают
+artifacts/
