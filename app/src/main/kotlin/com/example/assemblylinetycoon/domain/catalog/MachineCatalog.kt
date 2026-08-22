@@ -1,6 +1,6 @@
 package com.example.assemblylinetycoon.domain.catalog
 
-import com.example.assemblylinetycoon.core.utils.MathUtils
+import com.example.assemblylinetycoon.core.utils.MathUtility
 import com.example.assemblylinetycoon.domain.model.MachineType
 
 /**
@@ -17,7 +17,7 @@ object MachineCatalog {
      * Первая копия стоит ровно [MachineType.baseCost].
      */
     fun buildCost(type: MachineType, ownedCount: Int): Long =
-        MathUtils.upgradeCost(
+        MathUtility.upgradeCost(
             baseCost = type.baseCost,
             level = ownedCount,
             growthFactor = type.costGrowth,
@@ -25,7 +25,7 @@ object MachineCatalog {
 
     /** Цена перехода машины с уровня [level] на следующий. */
     fun upgradeCost(type: MachineType, level: Int): Long =
-        MathUtils.upgradeCost(
+        MathUtility.upgradeCost(
             baseCost = type.baseCost,
             level = level + 1,
             growthFactor = type.costGrowth,
@@ -33,7 +33,7 @@ object MachineCatalog {
 
     /** Длительность такта машины уровня [level] для рецепта с базой [baseDurationMillis]. */
     fun craftDuration(baseDurationMillis: Long, level: Int): Long =
-        MathUtils.craftDuration(baseDurationMillis, level)
+        MathUtility.craftDuration(baseDurationMillis, level)
 
     /** Что доступно к постройке в магазине, в порядке усложнения. */
     fun purchasable(): List<MachineType> = MachineType.entries.sortedBy(MachineType::baseCost)

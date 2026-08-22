@@ -28,14 +28,17 @@ enum class MachineType(
     /** Пресс: слиток → корпус, шестерня. */
     PRESS(baseCost = 300L, costGrowth = 1.15, inputSlots = 1),
 
+    // Волочильный стан отсутствует в списке машин GDD, но есть в документе
+    // «Economy & Balance Model»: на нём стоит рецепт медного провода.
+    // Удаление типа означало бы правку баланса, поэтому он сохранён.
     /** Волочильный стан: медь → провод. */
     WIRE_DRAWER(baseCost = 250L, costGrowth = 1.15, inputSlots = 1),
 
     /** Сборщик: несколько деталей → узел. */
     ASSEMBLER(baseCost = 800L, costGrowth = 1.18, inputSlots = 3),
 
-    /** Контроль качества: повышает ценность изделия. */
-    QUALITY_CONTROL(baseCost = 1_500L, costGrowth = 1.20, inputSlots = 1),
+    /** Контроль качества: финальный передел, повышает ценность изделия. */
+    QUALITY_GATE(baseCost = 1_500L, costGrowth = 1.20, inputSlots = 1),
 
     /** Экспортёр: продаёт то, что до него доехало. */
     EXPORTER(baseCost = 100L, costGrowth = 1.12, inputSlots = 1);
@@ -80,17 +83,17 @@ data class Machine(
     val position: GridPosition,
     val facing: Direction = Direction.RIGHT,
     val level: Int = 0,
-    val recipe: ItemId? = null,
+    val recipeOutputId: String? = null,
     val status: MachineStatus = MachineStatus.IDLE,
     val elapsedMillis: Long = 0L,
-    val inputBuffer: Map<ItemId, Int> = emptyMap(),
-    val outputBuffer: Map<ItemId, Int> = emptyMap(),
+    val inputBuffer: Map<String, Int> = emptyMap(),
+    val outputBuffer: Map<String, Int> = emptyMap(),
 ) {
     /** Куда машина выкладывает результат. */
     val outputPosition: GridPosition get() = position.neighbor(facing)
 
     /** Цена следующего уровня апгрейда. */
-    fun nextUpgradeCost(): Long = com.example.assemblylinetycoon.core.utils.MathUtils.upgradeCost(
+    fun nextUpgradeCost(): Long = com.example.assemblylinetycoon.core.utils.MathUtility.upgradeCost(
         baseCost = type.baseCost,
         level = level + 1,
         growthFactor = type.costGrowth,
@@ -98,7 +101,7 @@ data class Machine(
 
     /** Доля выполнения текущего такта для полосы прогресса. */
     fun progress(durationMillis: Long): Float =
-        com.example.assemblylinetycoon.core.utils.MathUtils.progress(elapsedMillis, durationMillis)
+        com.example.assemblylinetycoon.core.utils.MathUtility.progress(elapsedMillis, durationMillis)
 
     companion object {
         /** Максимум единиц одного предмета во входном буфере. */

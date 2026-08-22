@@ -4,7 +4,6 @@ import com.example.assemblylinetycoon.core.constants.GameConstants
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
-import kotlin.math.roundToLong
 
 /**
  * Формулы прогрессии из документа «Economy & Balance Model».
@@ -16,7 +15,7 @@ import kotlin.math.roundToLong
  * Деньги везде [Long]: накопления тайкуна быстро выходят за пределы точности
  * [Double], поэтому округление делается ровно один раз, на выходе.
  */
-object MathUtils {
+object MathUtility {
 
     /**
      * Стоимость перехода с уровня [level] на [level] + 1.
@@ -33,7 +32,10 @@ object MathUtils {
         require(baseCost >= 0L) { "Базовая цена не может быть отрицательной: $baseCost" }
         if (level == 0) return baseCost
         val raw = baseCost.toDouble() * growthFactor.pow(level)
-        return if (raw >= Long.MAX_VALUE.toDouble()) Long.MAX_VALUE else raw.roundToLong()
+        // Усечение, а не округление: формула из ТЗ задана как
+        // (BaseCost * 1.15^Level).toLong(). Цена, полученная усечением, никогда
+        // не окажется выше показанной игроку — это важнее лишней монеты точности.
+        return if (raw >= Long.MAX_VALUE.toDouble()) Long.MAX_VALUE else raw.toLong()
     }
 
     /**
@@ -94,7 +96,7 @@ object MathUtils {
         require(level >= 0) { "Уровень не может быть отрицательным: $level" }
         require(baseDurationMillis > 0L) { "Базовая длительность должна быть положительной" }
         val raw = baseDurationMillis.toDouble() * speedFactor.pow(level)
-        return max(minDurationMillis, raw.roundToLong())
+        return max(minDurationMillis, raw.toLong())
     }
 
     /**
@@ -114,7 +116,7 @@ object MathUtils {
         if (elapsedMillis <= 0L || ratePerSecond <= 0.0) return 0L
         val effective = min(elapsedMillis, capMillis)
         val earned = effective / 1000.0 * ratePerSecond * efficiency
-        return if (earned >= Long.MAX_VALUE.toDouble()) Long.MAX_VALUE else earned.roundToLong()
+        return if (earned >= Long.MAX_VALUE.toDouble()) Long.MAX_VALUE else earned.toLong()
     }
 
     /** Безопасное сложение баланса: тайкун не должен переполнять счётчик. */

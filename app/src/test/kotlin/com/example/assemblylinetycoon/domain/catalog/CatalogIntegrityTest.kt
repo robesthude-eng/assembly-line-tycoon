@@ -35,7 +35,7 @@ class CatalogIntegrityTest {
     fun rawItemsComeFromSpawners() {
         ItemCatalog.raw().forEach { item ->
             val recipe = RecipeCatalog.forOutput(item.id)!!
-            assertEquals(MachineType.SPAWNER, recipe.machine)
+            assertEquals(MachineType.SPAWNER, recipe.machineType)
             assertTrue("Сырьё ${item.id} не должно требовать входов", recipe.inputs.isEmpty())
         }
     }
@@ -45,7 +45,7 @@ class CatalogIntegrityTest {
         RecipeCatalog.all().forEach { recipe ->
             val added = RecipeCatalog.valueAdded(recipe)
             assertTrue(
-                "Рецепт ${recipe.output} убыточен: прибавка $added",
+                "Рецепт ${recipe.outputItemId} убыточен: прибавка $added",
                 added > 0L,
             )
         }
@@ -59,7 +59,7 @@ class CatalogIntegrityTest {
                 val inputValue = RecipeCatalog.inputValue(recipe)
                 val margin = RecipeCatalog.valueAdded(recipe).toDouble() / inputValue
                 assertTrue(
-                    "Маржа ${recipe.output} = ${(margin * 100).toInt()}% ниже порога 10%",
+                    "Маржа ${recipe.outputItemId} = ${(margin * 100).toInt()}% ниже порога 10%",
                     margin >= 0.10,
                 )
             }
@@ -68,10 +68,10 @@ class CatalogIntegrityTest {
     @Test // вход рецепта всегда ниже ярусом, чем выход — цепочка без циклов
     fun recipeGraphIsAcyclic() {
         RecipeCatalog.all().forEach { recipe ->
-            val outputTier = ItemCatalog[recipe.output].tier
+            val outputTier = ItemCatalog[recipe.outputItemId].tier
             recipe.inputs.keys.forEach { input ->
                 assertTrue(
-                    "Цикл в цепочке: ${recipe.output} требует $input того же или выше яруса",
+                    "Цикл в цепочке: ${recipe.outputItemId} требует $input того же или выше яруса",
                     ItemCatalog[input].tier < outputTier,
                 )
             }
@@ -80,7 +80,7 @@ class CatalogIntegrityTest {
 
     @Test // длительность такта растёт вместе с глубиной передела
     fun deeperRecipesTakeLonger() {
-        val byTier = RecipeCatalog.all().groupBy { ItemCatalog[it.output].tier }
+        val byTier = RecipeCatalog.all().groupBy { ItemCatalog[it.outputItemId].tier }
         val slowestPerTier = byTier.mapValues { (_, list) -> list.maxOf { it.baseDurationMillis } }
         val tiers = slowestPerTier.keys.sorted()
         tiers.zipWithNext().forEach { (low, high) ->
@@ -95,7 +95,7 @@ class CatalogIntegrityTest {
     fun craftDurationsStayInDesignRange() {
         RecipeCatalog.all().forEach { recipe ->
             assertTrue(
-                "Такт ${recipe.output} = ${recipe.baseDurationMillis} мс вне диапазона 2000..25000",
+                "Такт ${recipe.outputItemId} = ${recipe.baseDurationMillis} мс вне диапазона 2000..25000",
                 recipe.baseDurationMillis in 2_000L..25_000L,
             )
         }
@@ -105,7 +105,7 @@ class CatalogIntegrityTest {
     fun machineRecipeLookupIsConsistent() {
         MachineType.entries.forEach { type ->
             RecipeCatalog.forMachine(type).forEach { recipe ->
-                assertEquals(type, recipe.machine)
+                assertEquals(type, recipe.machineType)
             }
         }
         assertTrue("Экспортёр ничего не производит", RecipeCatalog.forMachine(MachineType.EXPORTER).isEmpty())

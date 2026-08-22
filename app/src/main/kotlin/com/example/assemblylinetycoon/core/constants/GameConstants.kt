@@ -28,7 +28,7 @@ object GameConstants {
     /** Нижняя граница длительности крафта после апгрейдов (мс). */
     const val MIN_CRAFT_DURATION_MS: Long = 100L
 
-    /** Множители формул апгрейда, см. MathUtils. */
+    /** Множители формул апгрейда, см. MathUtility. */
     const val COST_GROWTH_FACTOR: Double = 1.15
     const val CRAFT_SPEED_FACTOR: Double = 0.95
 

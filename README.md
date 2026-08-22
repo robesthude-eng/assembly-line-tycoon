@@ -53,9 +53,12 @@ grep -rn "^import android" app/src/main/kotlin/com/example/assemblylinetycoon/do
 **Domain — модели и баланс (этап 2 готов)**
 * `GameState` — единственный источник правды: баланс, поле, машины, слоты, «Ускорение», версия схемы
 * Сетка: `FactoryGrid`, `Cell`, `CellType`, `GridPosition`, `Direction` — плоский список ячеек, предмет хранится с долей пройденного пути (`itemProgress`), значение 1.0 = противодавление
-* Производство: `ItemId` (13 предметов, 6 ярусов), `Item`, `Recipe`, `MachineType` (7 типов), `Machine`, `MachineStatus`
+* Предметы: `Item` (ключ, название, категория, ярус, цена, размер стопки, подсказки для отрисовки), `ItemCategory` (RAW / PROCESSED / COMPONENT / FINAL), `ItemId` — 13 предметов со стабильными строковыми ключами
+* Рецепты: `Recipe` — входы как `Map<String, Int>`, проверка не зависит от порядка; `canCraftFrom`, `missingInputs`, `consumeFrom`
+* Машины: `MachineType` (SPAWNER, SMELTER, PRESS, WIRE_DRAWER, ASSEMBLER, QUALITY_GATE, EXPORTER), `MachineStatus` (IDLE → CRAFTING → OUTPUT_EJECT), `Machine`
 * Каталоги: `ItemCatalog`, `RecipeCatalog`, `MachineCatalog`, `SlotCatalog` — баланс в коде, не в сохранении
-* Формулы: `MathUtils` — `upgradeCost`, `bulkUpgradeCost`, `affordableLevels`, `craftDuration`, `offlineEarnings`, `addCoins` с защитой от переполнения `Long`
+* Контракты: `GameRepository`, `FactoryRepository`, `RecipeRepository`, `SettingsRepository`, `AdsRepository`, `BillingRepository`
+* Формулы: `MathUtility` — `upgradeCost`, `bulkUpgradeCost`, `affordableLevels`, `craftDuration`, `offlineEarnings`, `addCoins` с защитой от переполнения `Long`
 * `GameSettings`, `OfflineProgress`, `AdPlacement`, `AdResult`, `BillingProduct`, `PurchaseResult`
 * Контракты: `GameRepository`, `SettingsRepository`, `AdsRepository`, `BillingRepository`
 * Use case'ы: наблюдение/загрузка/сохранение состояния, настройки, офлайн-прогресс, показ рекламы
@@ -91,7 +94,7 @@ echo "sdk.dir=/путь/к/android-sdk" > local.properties
 ```
 
 Состояние проверки: `assembleDebug` собирает APK (~21 МБ),
-`testDebugUnitTest` — 41 тест, 0 падений.
+`testDebugUnitTest` — 79 тестов, 0 падений.
 
 Релиз и версии — см. [RELEASE.md](RELEASE.md):
 `./gradlew printVersion`, `./gradlew bumpPatch`, `./gradlew :app:bundleRelease`.
@@ -103,7 +106,7 @@ Compose Preview открывается в `presentation/ui/screens/FactoryScreen
 
 | Этап | Содержание |
 |---|---|
-| ~~2. Домен~~ | ✅ Модели, каталоги и формулы прогрессии, 41 юнит-тест |
+| ~~2. Домен~~ | ✅ Модели, каталоги, контракты и формулы прогрессии, 79 юнит-тестов |
 | 3. Движок | Реализация `reduce`: движение предметов по ячейкам, буферы машин, backpressure, экспорт; офлайн-доход с потолком 2 ч |
 | 4. UI | Отрисовка сетки и предметов на Canvas, HUD, магазин, дерево технологий |
 | 5. Реклама | Подключение Yandex SDK в обёртки, экран согласия, кулдауны плейсментов |
